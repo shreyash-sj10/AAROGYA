@@ -1,0 +1,13 @@
+{
+  "name": "ayudiet-final",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/modules/food/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "test:food": "node -e \"const { loadSampleFoods, getFoodsByCategory } = require('./src/modules/food'); console.log(loadSampleFoods().length); console.log(getFoodsByCategory('dal').length);\""
+  },
+  "dependencies": {
+    "ajv": "^8.17.1"
+  }
+}

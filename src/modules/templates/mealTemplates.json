@@ -1,0 +1,78 @@
+[
+  {
+    "id": "breakfast_light",
+    "meal_type": "breakfast",
+    "name": "Light Breakfast Template",
+    "components": [
+      {
+        "type": "flexible",
+        "category": "grain",
+        "quantity": 1
+      },
+      {
+        "type": "flexible",
+        "category": "dal",
+        "quantity": 1
+      }
+    ],
+    "tags": ["light", "balanced"],
+    "priority": 1
+  },
+  {
+    "id": "breakfast_simple",
+    "meal_type": "breakfast",
+    "name": "Simple Breakfast Template",
+    "components": [
+      {
+        "type": "flexible",
+        "category": "fruit",
+        "quantity": 1
+      }
+    ],
+    "tags": ["simple", "light"],
+    "priority": 2
+  },
+  {
+    "id": "lunch_standard",
+    "meal_type": "lunch",
+    "name": "Standard Lunch Template",
+    "components": [
+      {
+        "type": "fixed",
+        "item": "roti",
+        "quantity": 1
+      },
+      {
+        "type": "flexible",
+        "category": "dal",
+        "quantity": 1
+      },
+      {
+        "type": "flexible",
+        "category": "vegetable",
+        "quantity": 1
+      }
+    ],
+    "tags": ["standard", "balanced"],
+    "priority": 1
+  },
+  {
+    "id": "dinner_light",
+    "meal_type": "dinner",
+    "name": "Light Dinner Template",
+    "components": [
+      {
+        "type": "flexible",
+        "category": "dal",
+        "quantity": 1
+      },
+      {
+        "type": "flexible",
+        "category": "vegetable",
+        "quantity": 1
+      }
+    ],
+    "tags": ["light", "digestive"],
+    "priority": 1
+  }
+]

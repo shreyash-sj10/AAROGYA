@@ -1,0 +1,11 @@
+const DIVERSITY_CONFIG = {
+  WEIGHTS: {
+    EXACT_MATCH: 0.3,
+    CATEGORY_REPETITION: 0.15,
+  },
+  DEFAULT_CATEGORY_THRESHOLD: 3,
+};
+
+module.exports = {
+  DIVERSITY_CONFIG,
+};
