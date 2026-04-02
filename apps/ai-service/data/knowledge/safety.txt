@@ -1,0 +1,3 @@
+Medical safety guidance: avoid diagnosis and treatment claims in general wellness explanation systems.
+Do not provide prescriptions; suggest consulting qualified clinicians for medical concerns.
+Keep safety statements factual and non-directive.

@@ -1,0 +1,180 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "WeeklyDecisionResponse_v1",
+  "title": "WeeklyDecisionResponse_v1",
+  "description": "Weekly deterministic aggregation response with Trace_v1 compatibility.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "schema_version",
+    "compatibility",
+    "request_id",
+    "trace_id",
+    "weekly_plan",
+    "trace",
+    "meta"
+  ],
+  "properties": {
+    "version": { "type": "string", "const": "WeeklyDecisionResponse_v1" },
+    "schema_version": { "type": "integer", "const": 1 },
+    "compatibility": { "type": "string", "enum": ["backward"] },
+    "request_id": { "type": "string", "minLength": 1 },
+    "trace_id": { "type": "string", "minLength": 1 },
+    "weekly_plan": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["day", "meal_plan", "nutrition_summary", "score", "confidence"],
+        "properties": {
+          "day": { "type": "integer", "minimum": 1, "maximum": 7 },
+          "meal_plan": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["recipe_id", "name", "quantity"],
+              "properties": {
+                "recipe_id": { "type": "string", "minLength": 1 },
+                "name": { "type": "string", "minLength": 1 },
+                "quantity": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["value", "unit"],
+                  "properties": {
+                    "value": { "type": "number", "minimum": 0 },
+                    "unit": { "type": "string", "minLength": 1 }
+                  }
+                }
+              }
+            }
+          },
+          "nutrition_summary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["calories", "protein", "carbs", "fat"],
+            "properties": {
+              "calories": { "type": "number", "minimum": 0 },
+              "protein": { "type": "number", "minimum": 0 },
+              "carbs": { "type": "number", "minimum": 0 },
+              "fat": { "type": "number", "minimum": 0 }
+            }
+          },
+          "score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "schema_version", "compatibility", "trace_id", "timestamp", "stages"],
+      "properties": {
+        "version": { "type": "string", "const": "Trace_v1" },
+        "schema_version": { "type": "integer", "const": 1 },
+        "compatibility": { "type": "string", "enum": ["backward"] },
+        "trace_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "integer", "minimum": 0 },
+        "stages": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "candidate_generator",
+            "constraint_engine",
+            "scoring_engine",
+            "diversity_engine",
+            "optimizer",
+            "reliability_engine"
+          ],
+          "properties": {
+            "candidate_generator": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["input_count", "output_count"],
+              "properties": {
+                "input_count": { "type": "integer", "minimum": 0 },
+                "output_count": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "constraint_engine": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["input_count", "output_count", "rejected", "rules"],
+              "properties": {
+                "input_count": { "type": "integer", "minimum": 0 },
+                "output_count": { "type": "integer", "minimum": 0 },
+                "rejected": { "type": "integer", "minimum": 0 },
+                "rules": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["rule_id", "action", "reason"],
+                    "properties": {
+                      "rule_id": { "type": "string", "minLength": 1 },
+                      "action": { "type": "string", "enum": ["reject", "penalize"] },
+                      "reason": { "type": "string", "minLength": 1 }
+                    }
+                  }
+                }
+              }
+            },
+            "scoring_engine": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["input_count", "output_count"],
+              "properties": {
+                "input_count": { "type": "integer", "minimum": 0 },
+                "output_count": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "diversity_engine": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["input_count", "output_count"],
+              "properties": {
+                "input_count": { "type": "integer", "minimum": 0 },
+                "output_count": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "optimizer": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["input_count", "output_count", "combinations_evaluated", "selected_score"],
+              "properties": {
+                "input_count": { "type": "integer", "minimum": 0 },
+                "output_count": { "type": "integer", "minimum": 0 },
+                "combinations_evaluated": { "type": "integer", "minimum": 0 },
+                "selected_score": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            },
+            "reliability_engine": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["input_count", "output_count"],
+              "properties": {
+                "input_count": { "type": "integer", "minimum": 0 },
+                "output_count": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latency_ms", "cache_hit", "model_version", "prompt_version", "rules_version"],
+      "properties": {
+        "latency_ms": { "type": "integer", "minimum": 0 },
+        "cache_hit": { "type": "boolean" },
+        "served_latency_ms": { "type": "integer", "minimum": 0 },
+        "model_version": { "type": "string", "minLength": 1 },
+        "prompt_version": { "type": "string", "minLength": 1 },
+        "rules_version": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

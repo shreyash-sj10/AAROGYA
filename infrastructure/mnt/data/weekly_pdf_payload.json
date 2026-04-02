@@ -1,0 +1,409 @@
+{
+  "weekPlan": {
+    "week_plan": [
+      {
+        "day": 1,
+        "meals": {
+          "breakfast": [
+            {
+              "recipe_id": "a",
+              "name": "a",
+              "quantity": {
+                "value": 104.9801,
+                "unit": "grams"
+              }
+            }
+          ],
+          "lunch": [
+            {
+              "recipe_id": "b",
+              "name": "b",
+              "quantity": {
+                "value": 125.97612,
+                "unit": "grams"
+              }
+            }
+          ],
+          "dinner": [
+            {
+              "recipe_id": "c",
+              "name": "c",
+              "quantity": {
+                "value": 136.47413,
+                "unit": "grams"
+              }
+            }
+          ]
+        },
+        "nutrition_summary": {
+          "calories": 1889.6418,
+          "protein": 62.98806,
+          "carbs": 241.45423,
+          "fat": 57.739055
+        }
+      },
+      {
+        "day": 2,
+        "meals": {
+          "breakfast": [
+            {
+              "recipe_id": "a",
+              "name": "a",
+              "quantity": {
+                "value": 104.6207,
+                "unit": "grams"
+              }
+            }
+          ],
+          "lunch": [
+            {
+              "recipe_id": "b",
+              "name": "b",
+              "quantity": {
+                "value": 125.54484,
+                "unit": "grams"
+              }
+            }
+          ],
+          "dinner": [
+            {
+              "recipe_id": "c",
+              "name": "c",
+              "quantity": {
+                "value": 136.00691,
+                "unit": "grams"
+              }
+            }
+          ]
+        },
+        "nutrition_summary": {
+          "calories": 1893.63467,
+          "protein": 63.818627,
+          "carbs": 241.673817,
+          "fat": 58.587592
+        }
+      },
+      {
+        "day": 3,
+        "meals": {
+          "breakfast": [
+            {
+              "recipe_id": "a",
+              "name": "a",
+              "quantity": {
+                "value": 104.2614,
+                "unit": "grams"
+              }
+            }
+          ],
+          "lunch": [
+            {
+              "recipe_id": "b",
+              "name": "b",
+              "quantity": {
+                "value": 125.11368,
+                "unit": "grams"
+              }
+            }
+          ],
+          "dinner": [
+            {
+              "recipe_id": "c",
+              "name": "c",
+              "quantity": {
+                "value": 135.53982,
+                "unit": "grams"
+              }
+            }
+          ]
+        },
+        "nutrition_summary": {
+          "calories": 1897.55748,
+          "protein": 64.642068,
+          "carbs": 241.886448,
+          "fat": 59.428998
+        }
+      },
+      {
+        "day": 4,
+        "meals": {
+          "breakfast": [
+            {
+              "recipe_id": "a",
+              "name": "a",
+              "quantity": {
+                "value": 103.902,
+                "unit": "grams"
+              }
+            }
+          ],
+          "lunch": [
+            {
+              "recipe_id": "b",
+              "name": "b",
+              "quantity": {
+                "value": 124.6824,
+                "unit": "grams"
+              }
+            }
+          ],
+          "dinner": [
+            {
+              "recipe_id": "c",
+              "name": "c",
+              "quantity": {
+                "value": 135.0726,
+                "unit": "grams"
+              }
+            }
+          ]
+        },
+        "nutrition_summary": {
+          "calories": 1901.4066,
+          "protein": 65.45826,
+          "carbs": 242.09166,
+          "fat": 60.26316
+        }
+      },
+      {
+        "day": 5,
+        "meals": {
+          "breakfast": [
+            {
+              "recipe_id": "a",
+              "name": "a",
+              "quantity": {
+                "value": 103.5427,
+                "unit": "grams"
+              }
+            }
+          ],
+          "lunch": [
+            {
+              "recipe_id": "b",
+              "name": "b",
+              "quantity": {
+                "value": 124.25124,
+                "unit": "grams"
+              }
+            }
+          ],
+          "dinner": [
+            {
+              "recipe_id": "c",
+              "name": "c",
+              "quantity": {
+                "value": 134.60551,
+                "unit": "grams"
+              }
+            }
+          ]
+        },
+        "nutrition_summary": {
+          "calories": 1905.18568,
+          "protein": 66.267328,
+          "carbs": 242.289918,
+          "fat": 61.090193
+        }
+      },
+      {
+        "day": 6,
+        "meals": {
+          "breakfast": [
+            {
+              "recipe_id": "a",
+              "name": "a",
+              "quantity": {
+                "value": 103.1833,
+                "unit": "grams"
+              }
+            }
+          ],
+          "lunch": [
+            {
+              "recipe_id": "b",
+              "name": "b",
+              "quantity": {
+                "value": 123.81996,
+                "unit": "grams"
+              }
+            }
+          ],
+          "dinner": [
+            {
+              "recipe_id": "c",
+              "name": "c",
+              "quantity": {
+                "value": 134.13829,
+                "unit": "grams"
+              }
+            }
+          ]
+        },
+        "nutrition_summary": {
+          "calories": 1908.89105,
+          "protein": 67.069145,
+          "carbs": 242.480755,
+          "fat": 61.90998
+        }
+      },
+      {
+        "day": 7,
+        "meals": {
+          "breakfast": [
+            {
+              "recipe_id": "a",
+              "name": "a",
+              "quantity": {
+                "value": 102.824,
+                "unit": "grams"
+              }
+            }
+          ],
+          "lunch": [
+            {
+              "recipe_id": "b",
+              "name": "b",
+              "quantity": {
+                "value": 123.3888,
+                "unit": "grams"
+              }
+            }
+          ],
+          "dinner": [
+            {
+              "recipe_id": "c",
+              "name": "c",
+              "quantity": {
+                "value": 133.6712,
+                "unit": "grams"
+              }
+            }
+          ]
+        },
+        "nutrition_summary": {
+          "calories": 1912.5264,
+          "protein": 67.86384,
+          "carbs": 242.66464,
+          "fat": 62.72264
+        }
+      }
+    ],
+    "meta": {
+      "total_calories": 13308.84368,
+      "diversity_score": 0.9,
+      "confidence_avg": 0.8
+    }
+  },
+  "adherence": {
+    "user_id": "u1",
+    "week_id": "2026-03-30",
+    "adherence_score": 0.333333,
+    "stats": {
+      "meals_followed": 1,
+      "meals_skipped": 1,
+      "meals_modified": 1,
+      "adherence_score": 0.333333
+    }
+  },
+  "optimization": {
+    "before": {
+      "weekly_totals": {
+        "calories": 12810,
+        "protein": 441,
+        "carbs": 1631,
+        "fat": 406
+      },
+      "target_totals": {
+        "calories": 13300,
+        "protein": 595,
+        "carbs": 1470,
+        "fat": 420
+      },
+      "deviation": {
+        "calories": -490,
+        "protein": -154,
+        "carbs": 161,
+        "fat": -14
+      },
+      "imbalance": {
+        "low_protein_days": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "high_carb_days": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "uneven_distribution_days": []
+      }
+    },
+    "after": {
+      "weekly_totals": {
+        "calories": 13308.84368,
+        "protein": 458.107328,
+        "carbs": 1694.541468,
+        "fat": 421.741618
+      },
+      "target_totals": {
+        "calories": 13300,
+        "protein": 595,
+        "carbs": 1470,
+        "fat": 420
+      },
+      "deviation": {
+        "calories": 8.84368,
+        "protein": -136.892672,
+        "carbs": 224.541468,
+        "fat": 1.741618
+      },
+      "reverted": false
+    },
+    "adjustments_applied": [
+      {
+        "day": 1,
+        "adjustment_factor": 1.049801
+      },
+      {
+        "day": 2,
+        "adjustment_factor": 1.046207
+      },
+      {
+        "day": 3,
+        "adjustment_factor": 1.042614
+      },
+      {
+        "day": 4,
+        "adjustment_factor": 1.03902
+      },
+      {
+        "day": 5,
+        "adjustment_factor": 1.035427
+      },
+      {
+        "day": 6,
+        "adjustment_factor": 1.031833
+      },
+      {
+        "day": 7,
+        "adjustment_factor": 1.02824
+      }
+    ]
+  },
+  "userInfo": {
+    "user_id": "u1"
+  },
+  "dateRange": "2026-03-31 to 2026-04-06",
+  "deterministic_explanation": "Weekly plan optimized via deterministic quantity scaling with strict safety bounds.",
+  "ai_explanation": ""
+}

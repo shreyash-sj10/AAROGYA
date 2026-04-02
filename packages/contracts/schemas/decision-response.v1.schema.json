@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "DecisionResponse_v1",
+  "title": "DecisionResponse_v1",
+  "description": "Deterministic meal decision response. Confidence is metadata-only and does not alter selection.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "schema_version",
+    "compatibility",
+    "request_id",
+    "trace_id",
+    "meal_plan",
+    "nutrition_summary",
+    "score",
+    "confidence",
+    "trace",
+    "explanation",
+    "meta"
+  ],
+  "properties": {
+    "version": { "type": "string", "const": "DecisionResponse_v1" },
+    "schema_version": { "type": "integer", "const": 1 },
+    "compatibility": { "type": "string", "enum": ["backward"] },
+    "request_id": { "type": "string", "minLength": 1 },
+    "trace_id": { "type": "string", "minLength": 1 },
+    "meal_plan": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["recipe_id", "name", "quantity"],
+        "properties": {
+          "recipe_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "quantity": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "unit"],
+            "properties": {
+              "value": { "type": "number", "minimum": 0 },
+              "unit": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "nutrition_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calories", "protein", "carbs", "fat"],
+      "properties": {
+        "calories": { "type": "number", "minimum": 0 },
+        "protein": { "type": "number", "minimum": 0 },
+        "carbs": { "type": "number", "minimum": 0 },
+        "fat": { "type": "number", "minimum": 0 }
+      }
+    },
+    "score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "confidence": {
+      "description": "Confidence_v1 metadata object. Selection stays deterministic regardless of this value.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "schema_version", "compatibility", "value", "level", "components"],
+      "properties": {
+        "version": { "type": "string", "const": "Confidence_v1" },
+        "schema_version": { "type": "integer", "const": 1 },
+        "compatibility": { "type": "string", "enum": ["backward"] },
+        "value": { "type": "number", "minimum": 0, "maximum": 1 },
+        "level": { "type": "string", "enum": ["low", "medium", "high"] },
+        "components": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["penalty_impact", "diversity_impact", "relaxation_impact"],
+          "properties": {
+            "penalty_impact": { "type": "number", "minimum": 0, "maximum": 1 },
+            "diversity_impact": { "type": "number", "minimum": 0, "maximum": 1 },
+            "relaxation_impact": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      }
+    },
+    "trace": { "$ref": "Trace_v1" },
+    "explanation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deterministic", "ai_explanation", "citations"],
+      "properties": {
+        "deterministic": { "type": "string" },
+        "ai_explanation": { "type": "string" },
+        "citations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text_id", "source", "chapter"],
+            "properties": {
+              "text_id": { "type": "string", "minLength": 1 },
+              "source": { "type": "string", "minLength": 1 },
+              "chapter": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latency_ms", "cache_hit", "model_version", "prompt_version", "rules_version"],
+      "properties": {
+        "latency_ms": { "type": "integer", "minimum": 0 },
+        "cache_hit": { "type": "boolean" },
+        "served_latency_ms": { "type": "integer", "minimum": 0 },
+        "model_version": { "type": "string", "minLength": 1 },
+        "prompt_version": { "type": "string", "minLength": 1 },
+        "rules_version": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "Trace_v1",
+  "title": "Trace_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "schema_version", "compatibility", "trace_id", "timestamp", "stages"],
+  "properties": {
+    "version": { "type": "string", "const": "Trace_v1" },
+    "schema_version": { "type": "integer", "const": 1 },
+    "compatibility": { "type": "string", "enum": ["backward"] },
+    "trace_id": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "integer", "minimum": 0 },
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_generator",
+        "constraint_engine",
+        "scoring_engine",
+        "diversity_engine",
+        "optimizer",
+        "reliability_engine"
+      ],
+      "properties": {
+        "candidate_generator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_count", "output_count"],
+          "properties": {
+            "input_count": { "type": "integer", "minimum": 0 },
+            "output_count": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "constraint_engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_count", "output_count", "rejected", "rules"],
+          "properties": {
+            "input_count": { "type": "integer", "minimum": 0 },
+            "output_count": { "type": "integer", "minimum": 0 },
+            "rejected": { "type": "integer", "minimum": 0 },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["rule_id", "action", "reason"],
+                "properties": {
+                  "rule_id": { "type": "string", "minLength": 1 },
+                  "action": { "type": "string", "enum": ["reject", "penalize"] },
+                  "reason": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          }
+        },
+        "scoring_engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_count", "output_count"],
+          "properties": {
+            "input_count": { "type": "integer", "minimum": 0 },
+            "output_count": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "diversity_engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_count", "output_count"],
+          "properties": {
+            "input_count": { "type": "integer", "minimum": 0 },
+            "output_count": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "optimizer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_count", "output_count", "combinations_evaluated", "selected_score"],
+          "properties": {
+            "input_count": { "type": "integer", "minimum": 0 },
+            "output_count": { "type": "integer", "minimum": 0 },
+            "combinations_evaluated": { "type": "integer", "minimum": 0 },
+            "selected_score": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "reliability_engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_count", "output_count"],
+          "properties": {
+            "input_count": { "type": "integer", "minimum": 0 },
+            "output_count": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}
