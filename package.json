@@ -1,13 +1,6 @@
 {
-  "name": "ayudiet",
-  "private": true,
-  "workspaces": [
-    "apps/backend",
-    "apps/frontend"
-  ],
   "scripts": {
-    "backend:test": "npm --prefix apps/backend run test:all",
-    "backend:contracts": "npm --prefix apps/backend run test:contracts",
-    "frontend:build": "npm --prefix apps/frontend run build"
+    "lint": "npm --prefix apps/frontend run lint",
+    "build": "npm --prefix apps/frontend run build"
   }
 }
