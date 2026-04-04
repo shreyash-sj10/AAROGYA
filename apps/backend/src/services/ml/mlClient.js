@@ -8,12 +8,13 @@ const {
 const { logError } = require("../../observability/logger");
 const { recordError } = require("../../observability/metrics");
 
-const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
+const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || "https://ayudiet-llm-model.onrender.com").replace(/\/$/, "");
 const AI_PROFILE_URL = process.env.AYUDIET_AI_PROFILE_URL || `${AI_SERVICE_URL}/ai/profile`;
 const AI_EXPLAIN_URL = process.env.AYUDIET_AI_EXPLAIN_URL || `${AI_SERVICE_URL}/ai/explain`;
 const AI_FEEDBACK_URL = process.env.AYUDIET_AI_FEEDBACK_URL || `${AI_SERVICE_URL}/ai/feedback`;
 const AI_HEALTH_URL = `${AI_SERVICE_URL}/health`;
-const ML_PARSE_URL = process.env.AYUDIET_ML_PARSE_URL || `${AI_SERVICE_URL}/parse`;
+const ML_PARSE_URL = process.env.AYUDIET_ML_PARSE_URL || `${AI_SERVICE_URL}/symptoms`;
+const USE_ML = String(process.env.USE_ML || "true").trim().toLowerCase() !== "false";
 
 const logger = {
   error(message, meta = {}) {
@@ -32,9 +33,14 @@ const metrics = {
     recordError("SYSTEM_ERROR");
   },
 };
+function logMLServiceFallback(reason, requestId = "ml_fallback") {
+  const detail = typeof reason === "string" && reason.trim() ? reason.trim() : "fallback";
+  logLLMFallback({ endpoint: "ml/service", request_id: requestId, reason: detail });
+  console.warn(`[ml] service_unavailable_using_fallback: ${detail}`);
+}
 
-const TIMEOUT_MS = 3000;
-const MAX_RETRIES = 1;
+const TIMEOUT_MS = Number(process.env.AYUDIET_AI_TIMEOUT_MS || 2000);
+const MAX_RETRIES = 0;
 const HEALTH_RECHECK_MS = 30000;
 
 const CIRCUIT_FAILURE_THRESHOLD = Number(process.env.AYUDIET_AI_CB_THRESHOLD || 3);
@@ -390,6 +396,14 @@ function needsHealthRefresh() {
 }
 
 async function checkAIHealth() {
+  if (!USE_ML) {
+    healthState.healthy = false;
+    healthState.checked = true;
+    healthState.lastCheckedAt = Date.now();
+    logMLServiceFallback("USE_ML_disabled", "ml_health_disabled");
+    return false;
+  }
+
   if (healthState.inFlight) {
     return healthState.inFlight;
   }
@@ -491,6 +505,11 @@ async function safeFetch(url, body, meta = {}) {
   const safeMeta = meta && typeof meta === "object" ? meta : {};
   const requestId = toSafeString(safeMeta.request_id || `llm_${crypto.randomBytes(6).toString("hex")}`);
 
+  if (!USE_ML) {
+    logMLServiceFallback("USE_ML_disabled", requestId);
+    throw createAIBoundaryError("service unavailable");
+  }
+
   if (isCircuitOpen()) {
     logLLMFallback({ endpoint: url, request_id: requestId, reason: "circuit_open" });
     throw createAIBoundaryError("service unavailable");
@@ -589,6 +608,18 @@ async function safeFetch(url, body, meta = {}) {
   throw createAIBoundaryError("invalid response");
 }
 
+async function callML(endpoint, payload, meta = {}) {
+  const normalizedEndpoint = toSafeString(endpoint).replace(/^\/+/, "");
+  if (!normalizedEndpoint) {
+    throw new Error("ML endpoint is required");
+  }
+
+  const url = normalizedEndpoint.startsWith("http")
+    ? normalizedEndpoint
+    : `${AI_SERVICE_URL}/${normalizedEndpoint}`;
+
+  return safeFetch(url, payload, meta);
+}
 function sanitizeProfile(data) {
   const safe = toSafeObject(data);
   return {
@@ -781,11 +812,29 @@ async function getExplanation(payload, meta = {}) {
 
   assertSchema("explain", "request", requestPayload, REQUEST_SCHEMAS.explain, "ai/explain", requestId);
 
-  const data = await safeFetch(AI_EXPLAIN_URL, requestPayload, meta);
-  assertNoForbiddenKeys(data);
-  assertSchema("explain", "response", data, RESPONSE_SCHEMAS.explain, "ai/explain", requestId);
+  if (!USE_ML) {
+    logMLServiceFallback("USE_ML_disabled", requestId);
+    return {
+      explanation: "AI explanation unavailable in local fallback mode.",
+      citations: [],
+    };
+  }
 
-  return sanitizeExplanation(data);
+  try {
+    const data = await safeFetch(AI_EXPLAIN_URL, requestPayload, meta);
+    assertNoForbiddenKeys(data);
+    assertSchema("explain", "response", data, RESPONSE_SCHEMAS.explain, "ai/explain", requestId);
+    return sanitizeExplanation(data);
+  } catch (error) {
+    if (isAIBoundaryError(error)) {
+      logMLServiceFallback("explain_fallback", requestId);
+      return {
+        explanation: "AI explanation unavailable in local fallback mode.",
+        citations: [],
+      };
+    }
+    throw error;
+  }
 }
 
 async function parseFeedback(text, meta = {}) {
@@ -842,22 +891,8 @@ async function parseSymptoms(text, meta = {}) {
   }
 }
 
-const healthInterval = setInterval(() => {
-  checkAIHealth().catch((err) => {
-  logger.error("AI health check failed", { err });
-  metrics.increment("ai_health_error");
-});
-}, HEALTH_RECHECK_MS);
-if (typeof healthInterval.unref === "function") {
-  healthInterval.unref();
-}
-
-checkAIHealth().catch((err) => {
-  logger.error("AI health check failed", { err });
-  metrics.increment("ai_health_error");
-});
-
 module.exports = {
+  callML,
   safeFetch,
   getAIProfile,
   getExplanation,
@@ -869,4 +904,8 @@ module.exports = {
   assertNoForbiddenKeys,
   _circuitState: circuitState,
 };
+
+
+
+
 

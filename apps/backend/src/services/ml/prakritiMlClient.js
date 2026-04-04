@@ -1,8 +1,8 @@
 const Ajv = require("ajv");
+const { callML } = require("./mlClient");
 
-const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
-const PRAKRITI_ML_URL = process.env.AYUDIET_ML_PRAKRITI_URL || `${AI_SERVICE_URL}/ml/prakriti`;
-const PRAKRITI_ML_TIMEOUT_MS = Number(process.env.AYUDIET_ML_PRAKRITI_TIMEOUT_MS || 800);
+const PRAKRITI_ML_ENDPOINT = process.env.AYUDIET_ML_PRAKRITI_ENDPOINT || "prakriti";
+const USE_ML = String(process.env.USE_ML || "true").trim().toLowerCase() === "true";
 
 const requestSchema = {
   type: "object",
@@ -104,49 +104,26 @@ async function fetchMlPrakriti(payload) {
     throw error;
   }
 
-  const controller = new AbortController();
-  const timeoutMs = Number.isFinite(PRAKRITI_ML_TIMEOUT_MS) && PRAKRITI_ML_TIMEOUT_MS > 0
-    ? PRAKRITI_ML_TIMEOUT_MS
-    : 800;
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(PRAKRITI_ML_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const error = new Error(`Prakriti ML service request failed with status ${response.status}`);
-      error.code = "ML_HTTP_ERROR";
-      throw error;
-    }
-
-    const data = await response.json();
-    const validResponse = validateResponse(data);
-
-    if (!validResponse) {
-      const error = new Error("Prakriti ML response validation failed");
-      error.code = "ML_RESPONSE_VALIDATION_ERROR";
-      error.details = { errors: formatAjvErrors(validateResponse.errors) };
-      throw error;
-    }
-
-    return normalizeScores(data);
-  } catch (error) {
-    if (error && error.name === "AbortError") {
-      const timeoutError = new Error("Prakriti ML service timeout");
-      timeoutError.code = "ML_TIMEOUT";
-      throw timeoutError;
-    }
+  if (!USE_ML) {
+    const error = new Error("ML disabled");
+    error.code = "ML_DISABLED";
     throw error;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  const data = await callML(PRAKRITI_ML_ENDPOINT, payload, { request_id: "prakriti_ml" });
+  const scores = data && typeof data === "object" && data.scores && typeof data.scores === "object"
+    ? data.scores
+    : data;
+
+  const validResponse = validateResponse(scores);
+  if (!validResponse) {
+    const error = new Error("Prakriti ML response validation failed");
+    error.code = "ML_RESPONSE_VALIDATION_ERROR";
+    error.details = { errors: formatAjvErrors(validateResponse.errors) };
+    throw error;
+  }
+
+  return normalizeScores(scores);
 }
 
 module.exports = {
