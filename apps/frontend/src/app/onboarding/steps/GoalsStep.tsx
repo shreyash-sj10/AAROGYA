@@ -21,30 +21,42 @@ export function GoalsStep({ showErrors = false }: GoalsStepProps) {
   };
 
   const errors = useMemo(() => {
-    if ((showErrors || touched) && !goals) {
+    if (!(showErrors || touched)) {
+      return [] as string[];
+    }
+    if (!goals || !goals.trim()) {
       return ["Please select a goal"];
     }
     return [] as string[];
   }, [showErrors, touched, goals]);
 
+  const inputClass =
+    "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500";
+
   return (
-    <section>
-      <label>
-        Goal
+    <section className="flex flex-col gap-2">
+      <div>
+        <label htmlFor="onboarding-goals" className="block text-sm font-medium text-slate-700">
+          Primary goal
+        </label>
         <select
+          id="onboarding-goals"
+          className={`${inputClass} ${errors.length > 0 ? "border-red-400 focus:border-red-500 focus:ring-red-500" : ""}`}
           value={goals ?? ""}
           onBlur={markTouched}
-          onChange={(event) => setGoals(event.target.value || null)}
+          onChange={(event) => {
+            setTouched(true);
+            setGoals(event.target.value || null);
+          }}
         >
-          <option value="">Select goal</option>
-          <option value="Weight Loss">Weight Loss</option>
-          <option value="Muscle Gain">Muscle Gain</option>
+          <option value="">Select a goal</option>
+          <option value="Weight Loss">Weight loss</option>
+          <option value="Muscle Gain">Muscle gain</option>
           <option value="Maintenance">Maintenance</option>
-          <option value="Improve Digestion">Improve Digestion</option>
+          <option value="Improve Digestion">Improve digestion</option>
         </select>
-      </label>
-
-      {errors.length > 0 && <p>{errors.join(" | ")}</p>}
+        {errors.length > 0 && <p className="mt-1 text-sm text-red-600">{errors[0]}</p>}
+      </div>
     </section>
   );
 }
