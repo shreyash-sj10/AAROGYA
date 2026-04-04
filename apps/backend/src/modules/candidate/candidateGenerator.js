@@ -2,6 +2,7 @@ const { CANDIDATE_CONFIG } = require("../../config/candidate");
 const { normalizeString, toSafeArray } = require("../../utils/normalizeInput");
 const { extractCategories } = require("../../templates/mealTemplate.service");
 const { getValidRecipes } = require("../recipe/recipe.service");
+const { applyRules } = require("../../rules/engine/constraintEngine");
 
 function toSafeTopK(value) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -128,7 +129,21 @@ function createCandidateFood(food) {
   };
 }
 
-function generateCandidates(template, foods, userState, _rules, options) {
+function evaluateFoodWithRules(food, userState, rules) {
+  const safeFood = food && typeof food === "object" ? food : {};
+  const evaluation = applyRules(safeFood, userState, rules);
+
+  return {
+    ...safeFood,
+    evaluation: {
+      isValid: Boolean(evaluation && evaluation.isValid),
+      totalPenalty: Number(evaluation && typeof evaluation.totalPenalty === "number" ? evaluation.totalPenalty : 0),
+      triggeredRules: toSafeArray(evaluation && evaluation.triggeredRules).map((rule) => ({ ...rule })),
+    },
+  };
+}
+
+function generateCandidates(template, foods, userState, rules, options) {
   const safeFoods = toSafeArray(foods);
   const safeOptions = options && typeof options === "object" ? options : {};
   const topK = toSafeTopK(safeOptions.topK);
@@ -144,8 +159,11 @@ function generateCandidates(template, foods, userState, _rules, options) {
   const candidateMap = categories.reduce((acc, category) => {
     const categoryFoods = safeFoods.filter((food) => food && food.category === category);
     const preFilteredFoods = applyPreFilters(categoryFoods, userState);
+    const ruleEvaluatedFoods = preFilteredFoods
+      .map((food) => evaluateFoodWithRules(food, userState, rules))
+      .filter((food) => food.evaluation.isValid);
 
-    const prepared = preFilteredFoods
+    const prepared = ruleEvaluatedFoods
       .map(createCandidateFood)
       .sort(compareCandidates)
       .slice(0, topK > 0 ? topK : undefined);

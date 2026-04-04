@@ -46,11 +46,21 @@ function extractFallbackFlags(text) {
 async function buildUserState(input) {
   const safeInput = input && typeof input === "object" ? input : {};
   const sanitizedText = normalizeString(safeInput.text);
-  const mlResult = await parseSymptoms(sanitizedText);
-  const mlFlags = mlResult && Array.isArray(mlResult.symptom_tags) && mlResult.symptom_tags.length > 0
-    ? mlResult.symptom_tags
-    : null;
-  const fallbackUsed = mlFlags === null;
+
+  let mlFlags = null;
+  let fallbackUsed = true;
+
+  try {
+    const mlResult = await parseSymptoms(sanitizedText);
+    if (mlResult && Array.isArray(mlResult.symptom_tags) && mlResult.symptom_tags.length > 0) {
+      mlFlags = mlResult.symptom_tags;
+      fallbackUsed = false;
+    }
+  } catch (_error) {
+    mlFlags = null;
+    fallbackUsed = true;
+  }
+
   const rawFlags = fallbackUsed ? extractFallbackFlags(sanitizedText) : mlFlags;
   const normalizedFlags = normalizeFlags(rawFlags);
 

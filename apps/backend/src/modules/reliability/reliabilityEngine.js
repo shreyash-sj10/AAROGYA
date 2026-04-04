@@ -162,7 +162,7 @@ function buildSafeFallbackResult(safeFallback, inputCount) {
       constraint_rules: toSafeArray(toSafeObject(toSafeObject(safeFallback).traceExtension).constraint_rules),
     },
     confidence: {
-      value: clamp01(toSafeNumber(toSafeObject(safeFallback).score, 0)),
+      value: 0.3,
       components: {
         penalty_impact: 1,
         diversity_impact: 1,
@@ -192,7 +192,7 @@ function buildSafeFallbackResult(safeFallback, inputCount) {
   return result;
 }
 
-function applyReliability(input) {
+function computeReliabilityResult(input) {
   const safeInput = toSafeObject(input);
   const mealResult = toSafeObject(safeInput.mealResult);
   const mealPlan = toMealPlanFromBreakdown(mealResult);
@@ -225,13 +225,75 @@ function applyReliability(input) {
   return fallbackResult;
 }
 
+function isLegacyContextInput(input) {
+  const safe = toSafeObject(input);
+  return Boolean(safe.input && safe.meta && safe.template);
+}
+
+function toMealResultFromReliability(reliabilityResult) {
+  const safe = toSafeObject(reliabilityResult);
+  const names = toSafeArray(safe.mealPlan)
+    .map((entry) => toSafeObject(entry).name)
+    .filter((name) => typeof name === "string" && name.trim().length > 0);
+
+  return {
+    meal: names,
+    score: toSafeNumber(safe.score, 0),
+    breakdown: {
+      ...toSafeObject(safe.breakdown),
+      items: toSafeArray(toSafeObject(safe.breakdown).items).map((item) => ({ ...toSafeObject(item) })),
+    },
+  };
+}
+
+function mergeLegacyContext(inputContext, reliabilityResult) {
+  const safeContext = toSafeObject(inputContext);
+  const safeMeta = toSafeObject(safeContext.meta);
+  const safeReliabilityMeta = toSafeObject(toSafeObject(reliabilityResult).meta);
+
+  return {
+    ...safeContext,
+    mealResult: toMealResultFromReliability(reliabilityResult),
+    reliability: reliabilityResult,
+    confidence: toSafeObject(reliabilityResult).confidence,
+    meta: {
+      ...safeMeta,
+      fallback: Boolean(safeReliabilityMeta.fallback_used),
+      relaxationLevel: Math.max(0, Math.trunc(toSafeNumber(safeReliabilityMeta.relaxation_level, 0))),
+      fallbackReason: typeof safeReliabilityMeta.fallback_reason === "string" ? safeReliabilityMeta.fallback_reason : "",
+      confidence: clamp01(toSafeNumber(toSafeObject(reliabilityResult).confidence.value, toSafeNumber(reliabilityResult.score, 0))),
+    },
+  };
+}
+
+function applyReliability(input) {
+  const reliabilityResult = computeReliabilityResult(input);
+
+  if (isLegacyContextInput(input)) {
+    return mergeLegacyContext(input, reliabilityResult);
+  }
+
+  return reliabilityResult;
+}
+
 function computeConfidence(result) {
   const safe = toSafeObject(result);
+
+  if (safe.reliability && typeof safe.reliability === "object") {
+    const reliabilityConfidence = toSafeObject(safe.reliability).confidence;
+    return clamp01(toSafeNumber(reliabilityConfidence.value, toSafeNumber(toSafeObject(safe.reliability).score, 0.3)));
+  }
+
   return clamp01(toSafeNumber(toSafeObject(safe.confidence).value, toSafeNumber(safe.score, 0.3)));
 }
 
 function isLowQualityMeal(result) {
-  return toSafeArray(toSafeObject(result).mealPlan).length === 0 || toSafeNumber(result && result.score, 0) < 0.3;
+  const safe = toSafeObject(result);
+  if (safe.reliability && typeof safe.reliability === "object") {
+    return toSafeArray(toSafeObject(safe.reliability).mealPlan).length === 0 || toSafeNumber(toSafeObject(safe.reliability).score, 0) < 0.3;
+  }
+
+  return toSafeArray(safe.mealPlan).length === 0 || toSafeNumber(safe.score, 0) < 0.3;
 }
 
 function relaxConstraints(rules, level) {

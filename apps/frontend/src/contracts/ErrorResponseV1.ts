@@ -1,10 +1,13 @@
+import type { TraceV1 } from "@/contracts/TraceV1";
+
 export type ErrorResponseV1 = {
-  version: "v1";
-  schema_version?: 1;
-  compatibility?: "backward";
+  version: "ErrorResponse_v1";
+  request_id: string;
+  trace_id: string;
+  trace: TraceV1;
   error: {
     code: string;
     message: string;
-    details?: Record<string, unknown>;
+    details: Record<string, unknown>;
   };
 };

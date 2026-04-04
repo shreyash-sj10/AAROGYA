@@ -15,15 +15,22 @@
                     "test:pipeline":  "node tests/testPipeline.js \u0026\u0026 node tests/testIntegration.js",
                     "test:determinism":  "node tests/testDeterminism.js",
                     "test:system":  "node tests/testSystem.js \u0026\u0026 node tests/testSystemValidation.js",
-                    "test:all":  "node tests/testFoodDB.js \u0026\u0026 node tests/testMealTemplate.js \u0026\u0026 node tests/testCandidate.js \u0026\u0026 node tests/testCandidateGenerator.js \u0026\u0026 node tests/testConstraintEngine.js \u0026\u0026 node tests/testRules.js \u0026\u0026 node tests/testScoring.js \u0026\u0026 node tests/testScoringEngine.js \u0026\u0026 node tests/testDiversityEngine.js \u0026\u0026 node tests/testOptimizer.js \u0026\u0026 node tests/testPipeline.js \u0026\u0026 node tests/testIntegration.js \u0026\u0026 node tests/testSystem.js \u0026\u0026 node tests/testSystemValidation.js \u0026\u0026 node tests/testUserState.js",
+                    "test:all":  "node tests/testFoodDB.js \u0026\u0026 node tests/testMealTemplate.js \u0026\u0026 node tests/testCandidate.js \u0026\u0026 node tests/testCandidateGenerator.js \u0026\u0026 node tests/testConstraintEngine.js \u0026\u0026 node tests/testRules.js \u0026\u0026 node tests/testScoring.js \u0026\u0026 node tests/testScoringEngine.js \u0026\u0026 node tests/testDiversityEngine.js \u0026\u0026 node tests/testOptimizer.js \u0026\u0026 node tests/testPipeline.js \u0026\u0026 node tests/testIntegration.js \u0026\u0026 node tests/testSystem.js \u0026\u0026 node tests/testUserState.js",
                     "test:llm":  "node tests/testLLMIntegration.js",
                     "test:load":  "node ../../infrastructure/scripts/loadtest.js",
                     "test:ai-boundary":  "node tests/testAIBoundary.js",
-                    "test:contracts":  "node tests/testResponseContracts.js"
+                    "test:contracts":  "node tests/testResponseContracts.js",
+                    "dev":  "nodemon src/server.js",
+                    "start":  "node src/server.js"
                 },
     "dependencies":  {
                          "ajv":  "^8.17.1",
                          "pg":  "^8.13.1",
-                         "redis":  "^4.7.0"
-                     }
+                         "redis":  "^4.7.0",
+                         "cors":  "^2.8.5",
+                         "express":  "^4.21.2"
+                     },
+    "devDependencies":  {
+                            "nodemon":  "^3.1.7"
+                        }
 }

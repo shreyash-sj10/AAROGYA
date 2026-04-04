@@ -23,6 +23,9 @@ function getSelectedFoods(mealResult) {
           triggeredRules: toSafeArray(item.evaluation.triggeredRules).map((rule) => ({ ...rule })),
         }
         : {},
+      nutrition: item.nutrition && typeof item.nutrition === "object" ? { ...item.nutrition } : {},
+      dosha_effect: item.dosha_effect && typeof item.dosha_effect === "object" ? { ...item.dosha_effect } : {},
+      ayurveda: item.ayurveda && typeof item.ayurveda === "object" ? { ...item.ayurveda } : {},
       diversityPenalty: toSafeNumber(item.diversityPenalty, 0),
     }));
   }
@@ -105,6 +108,7 @@ function buildExplanationInput(mealResult, userState) {
       flexibleCategories: toSafeArray(meta.flexibleCategories),
       fixedItems: toSafeArray(meta.fixedItems),
       categoriesUsed: toSafeArray(meta.categoriesUsed),
+      risk_flags: toSafeArray(userState && userState.risk_flags).map((item) => normalizeString(item)).filter(Boolean),
     },
   };
 }
@@ -265,4 +269,8 @@ module.exports = {
   generateExplanation,
   generateExplanationWithAI,
 };
+
+
+
+
 

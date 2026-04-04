@@ -5,6 +5,8 @@ const weeklyDecisionRequestSchema = require("./schemas/weekly-decision-request.v
 const weeklyDecisionResponseSchema = require("./schemas/weekly-decision-response.v1.schema.json");
 const healthResponseSchema = require("./schemas/health-response.v1.schema.json");
 const metricsResponseSchema = require("./schemas/metrics-response.v1.schema.json");
+const errorResponseSchema = require("./schemas/error-response.v1.schema.json");
+const assistantResponseSchema = require("./schemas/assistant-response.v1.schema.json");
 
 const recipeAggregateSchema = {
   type: "object",
@@ -98,6 +100,8 @@ module.exports = {
   weeklyDecisionResponseSchema,
   healthResponseSchema,
   metricsResponseSchema,
+  errorResponseSchema,
+  assistantResponseSchema,
   recipeAggregateSchema,
   schemas: {
     "decision-request.v1.schema.json": decisionRequestSchema,
@@ -107,5 +111,8 @@ module.exports = {
     "weekly-decision-response.v1.schema.json": weeklyDecisionResponseSchema,
     "health-response.v1.schema.json": healthResponseSchema,
     "metrics-response.v1.schema.json": metricsResponseSchema,
+    "error-response.v1.schema.json": errorResponseSchema,
+    "assistant-response.v1.schema.json": assistantResponseSchema,
   },
 };
+

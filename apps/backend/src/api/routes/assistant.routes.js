@@ -4,6 +4,8 @@ const { buildErrorResponse } = require("../../contracts/errorBuilder");
 const { generateExplanationWithAI } = require("../../modules/explanation/explanationEngine");
 const { buildUserProfile } = require("../../modules/ai/ai.profile.service");
 const { validateAIProfile } = require("../../contracts/validators/validateAIProfile");
+const { validateAssistantResponse } = require("../../contracts/validators/validateAssistantResponse");
+const { validateTrace } = require("../../contracts/validators/validateTrace");
 
 const ajv = new Ajv({ strict: true, allErrors: true, allowUnionTypes: false });
 
@@ -37,13 +39,11 @@ const explainRequestSchema = {
   },
 };
 
-const explainResponseSchema = {
+const explainDataSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["request_id", "trace_id", "deterministic", "ai_explanation", "citations", "sources", "explanation", "highlights", "warnings"],
+  required: ["deterministic", "ai_explanation", "citations", "sources", "explanation", "highlights", "warnings"],
   properties: {
-    request_id: { type: "string", minLength: 1 },
-    trace_id: { type: "string", minLength: 1 },
     deterministic: { type: "string" },
     ai_explanation: { type: "string" },
     citations: { type: "array" },
@@ -64,13 +64,11 @@ const profileRequestSchema = {
   },
 };
 
-const profileResponseSchema = {
+const profileDataSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["request_id", "trace_id", "version", "schema_version", "compatibility", "risk_flags", "dosha_estimate", "confidence"],
+  required: ["version", "schema_version", "compatibility", "risk_flags", "dosha_estimate", "confidence"],
   properties: {
-    request_id: { type: "string", minLength: 1 },
-    trace_id: { type: "string", minLength: 1 },
     version: { type: "string", const: "AIProfileOutput_v1" },
     schema_version: { type: "integer", const: 1 },
     compatibility: { type: "string", enum: ["backward"] },
@@ -90,9 +88,9 @@ const profileResponseSchema = {
 };
 
 const validateExplainRequest = ajv.compile(explainRequestSchema);
-const validateExplainResponse = ajv.compile(explainResponseSchema);
+const validateExplainData = ajv.compile(explainDataSchema);
 const validateProfileRequest = ajv.compile(profileRequestSchema);
-const validateProfileResponse = ajv.compile(profileResponseSchema);
+const validateProfileData = ajv.compile(profileDataSchema);
 
 function toSafeObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -122,12 +120,84 @@ function createIdentity(prefix) {
   };
 }
 
-function buildApiError(code, message, details = {}) {
+function buildOperationalTrace(traceId, startedAt, outputCount = 1) {
+  return {
+    version: "Trace_v1",
+    schema_version: 1,
+    compatibility: "backward",
+    trace_id: toSafeString(traceId, "assistant_trace"),
+    timestamp: Math.max(0, Math.floor(startedAt)),
+    stages: {
+      candidate_generator: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+      },
+      constraint_engine: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+        rejected: 0,
+        rules: [],
+      },
+      scoring_engine: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+      },
+      diversity_engine: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+      },
+      optimizer: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+        combinations_evaluated: 1,
+        selected_score: outputCount > 0 ? 1 : 0,
+      },
+      reliability_engine: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+      },
+    },
+  };
+}
+
+function buildApiError(code, message, identity, details = {}) {
+  const safeIdentity = toSafeObject(identity);
   return buildErrorResponse({
     code,
     message,
+    request_id: toSafeString(safeIdentity.request_id, "assistant_request"),
+    trace_id: toSafeString(safeIdentity.trace_id, "assistant_trace"),
     details: toSafeObject(details),
   });
+}
+
+function buildAssistantResponse(data, identity, trace) {
+  const safeIdentity = toSafeObject(identity);
+  const safeTrace = toSafeObject(trace);
+
+  const traceValidation = validateTrace(safeTrace);
+  if (!traceValidation.valid) {
+    throw new Error(`Trace_v1 validation failed: ${JSON.stringify(traceValidation.errors || [])}`);
+  }
+
+  const payload = {
+    version: "AssistantResponse_v1",
+    request_id: toSafeString(safeIdentity.request_id, "assistant_request"),
+    trace_id: toSafeString(safeIdentity.trace_id, "assistant_trace"),
+    trace: safeTrace,
+    data: toSafeObject(data),
+    meta: {
+      request_id: toSafeString(safeIdentity.request_id, "assistant_request"),
+      trace_id: toSafeString(safeIdentity.trace_id, "assistant_trace"),
+    },
+  };
+
+  const validation = validateAssistantResponse(payload);
+  if (!validation.valid) {
+    throw new Error(`AssistantResponse_v1 validation failed: ${JSON.stringify(validation.errors || [])}`);
+  }
+
+  return payload;
 }
 
 function registerAssistantRoutes(app) {
@@ -137,15 +207,14 @@ function registerAssistantRoutes(app) {
 
   app.post("/explain", async (req, res) => {
     const identity = createIdentity("explain");
+    const startedAt = Date.now();
 
     try {
       const body = req && req.body;
       const validRequest = validateExplainRequest(body);
       if (!validRequest) {
-        return res.status(400).json(buildApiError("VALIDATION_ERROR", "Explain request validation failed", {
+        return res.status(400).json(buildApiError("VALIDATION_ERROR", "Explain request validation failed", identity, {
           source: "api.explain",
-          request_id: identity.request_id,
-          trace_id: identity.trace_id,
           errors: formatAjvErrors(validateExplainRequest.errors),
         }));
       }
@@ -157,28 +226,19 @@ function registerAssistantRoutes(app) {
         safeBody.trace_context
       );
 
-      const responsePayload = {
-        request_id: identity.request_id,
-        trace_id: identity.trace_id,
-        ...result,
-      };
-
-      const validResponse = validateExplainResponse(responsePayload);
-      if (!validResponse) {
-        return res.status(500).json(buildApiError("RESPONSE_VALIDATION_ERROR", "Explain response validation failed", {
+      const validData = validateExplainData(result);
+      if (!validData) {
+        return res.status(500).json(buildApiError("RESPONSE_VALIDATION_ERROR", "Explain response validation failed", identity, {
           source: "api.explain",
-          request_id: identity.request_id,
-          trace_id: identity.trace_id,
-          errors: formatAjvErrors(validateExplainResponse.errors),
+          errors: formatAjvErrors(validateExplainData.errors),
         }));
       }
 
+      const responsePayload = buildAssistantResponse(result, identity, buildOperationalTrace(identity.trace_id, startedAt));
       return res.status(200).json(responsePayload);
     } catch (error) {
-      return res.status(500).json(buildApiError("INTERNAL_ERROR", "Explain endpoint failed", {
+      return res.status(500).json(buildApiError("INTERNAL_ERROR", "Explain endpoint failed", identity, {
         source: "api.explain",
-        request_id: identity.request_id,
-        trace_id: identity.trace_id,
         reason: error instanceof Error ? error.message : "unknown_error",
       }));
     }
@@ -186,15 +246,14 @@ function registerAssistantRoutes(app) {
 
   app.post("/profile", async (req, res) => {
     const identity = createIdentity("profile");
+    const startedAt = Date.now();
 
     try {
       const body = req && req.body;
       const validRequest = validateProfileRequest(body);
       if (!validRequest) {
-        return res.status(400).json(buildApiError("VALIDATION_ERROR", "Profile request validation failed", {
+        return res.status(400).json(buildApiError("VALIDATION_ERROR", "Profile request validation failed", identity, {
           source: "api.profile",
-          request_id: identity.request_id,
-          trace_id: identity.trace_id,
           errors: formatAjvErrors(validateProfileRequest.errors),
         }));
       }
@@ -207,36 +266,25 @@ function registerAssistantRoutes(app) {
 
       const aiValidation = validateAIProfile(result);
       if (!aiValidation.valid) {
-        return res.status(500).json(buildApiError("RESPONSE_VALIDATION_ERROR", "Profile response validation failed", {
+        return res.status(500).json(buildApiError("RESPONSE_VALIDATION_ERROR", "Profile response validation failed", identity, {
           source: "api.profile",
-          request_id: identity.request_id,
-          trace_id: identity.trace_id,
           errors: aiValidation.errors || [],
         }));
       }
 
-      const responsePayload = {
-        request_id: identity.request_id,
-        trace_id: identity.trace_id,
-        ...result,
-      };
-
-      const schemaValidation = validateProfileResponse(responsePayload);
+      const schemaValidation = validateProfileData(result);
       if (!schemaValidation) {
-        return res.status(500).json(buildApiError("RESPONSE_VALIDATION_ERROR", "Profile envelope validation failed", {
+        return res.status(500).json(buildApiError("RESPONSE_VALIDATION_ERROR", "Profile envelope validation failed", identity, {
           source: "api.profile",
-          request_id: identity.request_id,
-          trace_id: identity.trace_id,
-          errors: formatAjvErrors(validateProfileResponse.errors),
+          errors: formatAjvErrors(validateProfileData.errors),
         }));
       }
 
+      const responsePayload = buildAssistantResponse(result, identity, buildOperationalTrace(identity.trace_id, startedAt));
       return res.status(200).json(responsePayload);
     } catch (error) {
-      return res.status(500).json(buildApiError("INTERNAL_ERROR", "Profile endpoint failed", {
+      return res.status(500).json(buildApiError("INTERNAL_ERROR", "Profile endpoint failed", identity, {
         source: "api.profile",
-        request_id: identity.request_id,
-        trace_id: identity.trace_id,
         reason: error instanceof Error ? error.message : "unknown_error",
       }));
     }

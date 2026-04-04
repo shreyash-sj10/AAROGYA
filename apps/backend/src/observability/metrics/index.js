@@ -1,12 +1,14 @@
 const MAX_LATENCY_SAMPLES = Math.max(10, Number(process.env.AYUDIET_METRICS_LATENCY_SAMPLE_CAP || 1000));
 
 const counters = {
+  api_request_count: 0,
+  api_error_count: 0,
   request_count: 0,
   total_latency: 0,
   total_pipeline_time: 0,
   total_optimizer_time: 0,
   total_candidate_count: 0,
-  fallback_count: 0,
+  ai_fallback_count: 0,
   confidence_distribution: {
     low: 0,
     medium: 0,
@@ -73,6 +75,10 @@ function buildAverage(total, count) {
   }
 
   return Number((total / count).toFixed(3));
+}
+
+function clampRate(value) {
+  return Number(Math.min(1, Math.max(0, toSafeNumber(value, 0))).toFixed(6));
 }
 
 function percentile(arr, p) {
@@ -148,6 +154,14 @@ function bucketizeAILatency(latencyMs) {
   counters.ai.latency_histogram.gt_1000ms += 1;
 }
 
+function recordApiRequest() {
+  counters.api_request_count += 1;
+}
+
+function recordApiError() {
+  counters.api_error_count += 1;
+}
+
 function recordRequest({ latency_ms, pipeline_ms, optimizer_ms, candidate_count, usedFallback, confidenceLevel } = {}) {
   const safeLatency = Math.max(0, toSafeNumber(latency_ms, 0));
   const safePipeline = Math.max(0, toSafeNumber(pipeline_ms, 0));
@@ -164,7 +178,7 @@ function recordRequest({ latency_ms, pipeline_ms, optimizer_ms, candidate_count,
   pushLatencySample(safeLatency);
 
   if (usedFallback) {
-    counters.fallback_count += 1;
+    counters.ai_fallback_count += 1;
   }
 
   counters.confidence_distribution[level] += 1;
@@ -231,8 +245,17 @@ function getSnapshot() {
   const aiValidations = counters.ai.schema_valid_count + counters.ai.schema_invalid_count;
   const p95Latency = percentile(counters.latency_samples, 95);
   const p99Latency = percentile(counters.latency_samples, 99);
+  const apiRequestCount = counters.api_request_count;
+  const fallbackRate = apiRequestCount > 0
+    ? clampRate(counters.ai_fallback_count / apiRequestCount)
+    : 0;
+  const aiFallbackRate = counters.ai.request_count > 0
+    ? clampRate(counters.ai.fallback_count / counters.ai.request_count)
+    : 0;
 
   return {
+    api_request_count: apiRequestCount,
+    api_error_count: counters.api_error_count,
     request_count: requestCount,
     avg_latency: buildAverage(counters.total_latency, requestCount),
     p95_latency: p95Latency,
@@ -240,12 +263,12 @@ function getSnapshot() {
     avg_pipeline_ms: buildAverage(counters.total_pipeline_time, requestCount),
     avg_optimizer_ms: buildAverage(counters.total_optimizer_time, requestCount),
     avg_candidate_count: buildAverage(counters.total_candidate_count, requestCount),
-    fallback_rate: requestCount > 0 ? Number((counters.fallback_count / requestCount).toFixed(6)) : 0,
+    fallback_rate: fallbackRate,
     totals: {
       pipeline_ms: Number(counters.total_pipeline_time.toFixed(3)),
       optimizer_ms: Number(counters.total_optimizer_time.toFixed(3)),
       candidate_count: counters.total_candidate_count,
-      fallback_count: counters.fallback_count,
+      fallback_count: counters.ai_fallback_count,
     },
     last_request: { ...counters.last_request },
     confidence_distribution: { ...counters.confidence_distribution },
@@ -257,9 +280,9 @@ function getSnapshot() {
       schema_invalid_count: counters.ai.schema_invalid_count,
       fallback_count: counters.ai.fallback_count,
       avg_latency_ms: buildAverage(counters.ai.total_latency, counters.ai.response_count),
-      schema_compliance_rate: aiValidations > 0 ? Number((counters.ai.schema_valid_count / aiValidations).toFixed(6)) : 0,
-      invalid_response_rate: aiValidations > 0 ? Number((counters.ai.schema_invalid_count / aiValidations).toFixed(6)) : 0,
-      fallback_rate: counters.ai.request_count > 0 ? Number((counters.ai.fallback_count / counters.ai.request_count).toFixed(6)) : 0,
+      schema_compliance_rate: aiValidations > 0 ? clampRate(counters.ai.schema_valid_count / aiValidations) : 0,
+      invalid_response_rate: aiValidations > 0 ? clampRate(counters.ai.schema_invalid_count / aiValidations) : 0,
+      fallback_rate: aiFallbackRate,
       latency_histogram: { ...counters.ai.latency_histogram },
     },
     ai_disagreement: {
@@ -273,12 +296,14 @@ function getSnapshot() {
 }
 
 function resetMetrics() {
+  counters.api_request_count = 0;
+  counters.api_error_count = 0;
   counters.request_count = 0;
   counters.total_latency = 0;
   counters.total_pipeline_time = 0;
   counters.total_optimizer_time = 0;
   counters.total_candidate_count = 0;
-  counters.fallback_count = 0;
+  counters.ai_fallback_count = 0;
   counters.confidence_distribution = {
     low: 0,
     medium: 0,
@@ -324,6 +349,8 @@ function resetMetrics() {
 }
 
 module.exports = {
+  recordApiRequest,
+  recordApiError,
   recordRequest,
   recordError,
   recordAIRequest,

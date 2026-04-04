@@ -10,7 +10,7 @@ const { buildErrorResponse } = require("../contracts/errorBuilder");
 const redis = require("../services/cache/redis.service");
 const pg = require("../services/db/pg.service");
 const { getHealthStatus } = require("../services/ml/mlClient");
-const { getSnapshot } = require("../observability/metrics");
+const { getSnapshot, recordError } = require("../observability/metrics");
 
 const IDEMPOTENCY_TTL_SECONDS = Number(process.env.AYUDIET_IDEMPOTENCY_TTL_SECONDS || 300);
 
@@ -57,14 +57,16 @@ function buildApiError(code, message, reqBody, details = {}) {
   const safeDetails = details && typeof details === "object" ? details : {};
   const safeBody = reqBody && typeof reqBody === "object" ? reqBody : {};
 
+  const metaRequestId = toSafeString(safeDetails.request_id || safeBody.request_id || toSafeObject(safeBody.meta).request_id, "unknown_request");
+  const metaTraceId = toSafeString(safeDetails.trace_id || safeBody.trace_id || toSafeObject(safeBody.meta).trace_id, "unknown_trace");
+  const { request_id: _rid, trace_id: _tid, ...detailWithoutMeta } = safeDetails;
+
   return buildErrorResponse({
     code,
     message,
-    details: {
-      request_id: toSafeString(safeBody.request_id || toSafeObject(safeBody.meta).request_id, "unknown_request"),
-      trace_id: toSafeString(safeBody.trace_id || toSafeObject(safeBody.meta).trace_id, "unknown_trace"),
-      ...safeDetails,
-    },
+    request_id: metaRequestId,
+    trace_id: metaTraceId,
+    details: detailWithoutMeta,
   });
 }
 
@@ -91,10 +93,6 @@ function isValidCachedResponse(parsed) {
 function mapErrorToStatus(error) {
   const message = error instanceof Error ? error.message : String(error || "");
 
-  if (message.startsWith("Redis failure:")) {
-    return { status: 503, code: "REDIS_UNAVAILABLE", message };
-  }
-
   if (message.startsWith("DB failure:")) {
     return { status: 503, code: "DB_UNAVAILABLE", message };
   }
@@ -104,6 +102,140 @@ function mapErrorToStatus(error) {
   }
 
   return { status: 500, code: "INTERNAL_ERROR", message: "Internal server error" };
+}
+
+function applyCacheDegradedMeta(response, cacheError) {
+  const payload = clone(response);
+  payload.meta = {
+    ...toSafeObject(payload.meta),
+    cache_hit: false,
+  };
+
+  if (cacheError) {
+    payload.meta.cache_error = true;
+  }
+
+  return payload;
+}
+
+function buildOperationalTrace(traceId, startedAt, outputCount = 1, selectedScore = 1) {
+  return {
+    version: "Trace_v1",
+    schema_version: 1,
+    compatibility: "backward",
+    trace_id: toSafeString(traceId, "ops_trace"),
+    timestamp: Math.max(0, Math.floor(startedAt)),
+    stages: {
+      candidate_generator: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+      },
+      constraint_engine: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+        rejected: 0,
+        rules: [],
+      },
+      scoring_engine: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+      },
+      diversity_engine: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+      },
+      optimizer: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+        combinations_evaluated: 1,
+        selected_score: Math.max(0, Math.min(1, selectedScore)),
+      },
+      reliability_engine: {
+        input_count: 1,
+        output_count: Math.max(0, outputCount),
+      },
+    },
+  };
+}
+function createDefaultMetricsSnapshot() {
+  return {
+    api_request_count: 0,
+    api_error_count: 0,
+    request_count: 0,
+    avg_latency: 0,
+    p95_latency: 0,
+    p99_latency: 0,
+    avg_pipeline_ms: 0,
+    avg_optimizer_ms: 0,
+    avg_candidate_count: 0,
+    fallback_rate: 0,
+    totals: {
+      pipeline_ms: 0,
+      optimizer_ms: 0,
+      candidate_count: 0,
+      fallback_count: 0,
+    },
+    last_request: {
+      latency_ms: 0,
+      pipeline_ms: 0,
+      optimizer_ms: 0,
+      candidate_count: 0,
+      used_fallback: false,
+      confidence_level: "low",
+    },
+    confidence_distribution: {
+      low: 0,
+      medium: 0,
+      high: 0,
+    },
+    errors: {
+      SCHEMA_VALIDATION_FAILED: 0,
+      OPTIMIZER_FAILURE: 0,
+      AI_FAILURE: 0,
+      CACHE_ERROR: 0,
+      CACHE_PARSE_ERROR: 0,
+      SYSTEM_ERROR: 0,
+    },
+    ai_metrics: {
+      request_count: 0,
+      response_count: 0,
+      schema_valid_count: 0,
+      schema_invalid_count: 0,
+      fallback_count: 0,
+      avg_latency_ms: 0,
+      schema_compliance_rate: 0,
+      invalid_response_rate: 0,
+      fallback_rate: 0,
+      latency_histogram: {
+        le_50ms: 0,
+        le_100ms: 0,
+        le_250ms: 0,
+        le_500ms: 0,
+        le_1000ms: 0,
+        gt_1000ms: 0,
+      },
+    },
+    ai_disagreement: {
+      compared_count: 0,
+      mismatch_count: 0,
+      mismatch_rate: 0,
+    },
+  };
+}
+
+function buildMetricsResponse(identity, snapshot, startedAt) {
+  return {
+    version: "MetricsResponse_v1",
+    request_id: identity.request_id,
+    trace_id: identity.trace_id,
+    trace: buildOperationalTrace(identity.trace_id, startedAt, 1, 1),
+    ...snapshot,
+    meta: {
+      latency_ms: Math.max(0, Date.now() - startedAt),
+      request_id: identity.request_id,
+      trace_id: identity.trace_id,
+    },
+  };
 }
 
 function registerPlanRoutes(app, deps = {}) {
@@ -124,10 +256,17 @@ function registerPlanRoutes(app, deps = {}) {
     validateRequest,
     async (req, res) => {
       const startedAt = Date.now();
+      const idempotencyKey = buildIdempotencyKey(req.body);
+      let cacheError = false;
 
       try {
-        const idempotencyKey = buildIdempotencyKey(req.body);
-        const cached = await redisClient.get(idempotencyKey);
+        let cached = null;
+        try {
+          cached = await redisClient.get(idempotencyKey);
+        } catch (_error) {
+          cacheError = true;
+          recordError("CACHE_ERROR");
+        }
 
         if (cached) {
           let parsed = null;
@@ -138,6 +277,8 @@ function registerPlanRoutes(app, deps = {}) {
             validCache = isValidCachedResponse(parsed);
           } catch (_error) {
             validCache = false;
+            cacheError = true;
+            recordError("CACHE_PARSE_ERROR");
           }
 
           if (validCache) {
@@ -147,22 +288,54 @@ function registerPlanRoutes(app, deps = {}) {
               cache_hit: true,
               served_latency_ms: Math.max(0, Date.now() - startedAt),
             };
+
+            if (cacheError) {
+              payload.meta.cache_error = true;
+            }
+
             return res.status(200).json(payload);
           }
 
-          await purgeCacheKey(redisClient, idempotencyKey);
+          try {
+            await purgeCacheKey(redisClient, idempotencyKey);
+          } catch (_error) {
+            cacheError = true;
+            recordError("CACHE_ERROR");
+          }
         }
 
         const input = adaptRequest(req.body);
         const result = await generatePlan(input);
+        const payload = applyCacheDegradedMeta(result, cacheError);
 
-        await redisClient.set(
-          idempotencyKey,
-          JSON.stringify(result),
-          Number.isFinite(IDEMPOTENCY_TTL_SECONDS) && IDEMPOTENCY_TTL_SECONDS > 0 ? IDEMPOTENCY_TTL_SECONDS : 300
-        );
+        const responseValidation = validateDecisionResponse(payload);
+        if (!responseValidation.valid) {
+          return res.status(500).json(buildApiError("RESPONSE_VALIDATION_ERROR", "DecisionResponse_v1 validation failed", req && req.body, {
+            source: "api.plan",
+            errors: responseValidation.errors || [],
+          }));
+        }
 
-        return res.status(200).json(result);
+        const traceValidation = validateTrace(payload.trace);
+        if (!traceValidation.valid) {
+          return res.status(500).json(buildApiError("TRACE_VALIDATION_ERROR", "Trace_v1 validation failed", req && req.body, {
+            source: "api.plan",
+            errors: traceValidation.errors || [],
+          }));
+        }
+
+        try {
+          await redisClient.set(
+            idempotencyKey,
+            JSON.stringify(payload),
+            Number.isFinite(IDEMPOTENCY_TTL_SECONDS) && IDEMPOTENCY_TTL_SECONDS > 0 ? IDEMPOTENCY_TTL_SECONDS : 300
+          );
+        } catch (_error) {
+          payload.meta.cache_error = true;
+          recordError("CACHE_ERROR");
+        }
+
+        return res.status(200).json(payload);
       } catch (error) {
         const mapped = mapErrorToStatus(error);
         return res.status(mapped.status).json(buildApiError(mapped.code, mapped.message, req && req.body, {
@@ -178,37 +351,26 @@ function registerPlanRoutes(app, deps = {}) {
       const startedAt = Date.now();
       const identity = createIdentity("metrics");
 
+      let snapshot;
       try {
-        const snapshot = getSnapshot();
-        const response = {
-          version: "MetricsResponse_v1",
-          request_id: identity.request_id,
-          trace_id: identity.trace_id,
-          ...snapshot,
-          meta: {
-            latency_ms: Math.max(0, Date.now() - startedAt),
-          },
-        };
-
-        const validation = validateMetricsResponse(response);
-        if (!validation.valid) {
-          return res.status(500).json(buildApiError("RESPONSE_VALIDATION_ERROR", "Metrics response validation failed", {}, {
-            source: "api.metrics",
-            errors: validation.errors || [],
-            request_id: identity.request_id,
-            trace_id: identity.trace_id,
-          }));
-        }
-
-        return res.status(200).json(response);
-      } catch (error) {
-        return res.status(500).json(buildApiError("METRICS_UNAVAILABLE", "Failed to fetch metrics", {}, {
-          source: "api.metrics",
-          reason: error instanceof Error ? error.message : "metrics_fetch_failed",
-          request_id: identity.request_id,
-          trace_id: identity.trace_id,
-        }));
+        snapshot = getSnapshot();
+      } catch (_error) {
+        snapshot = createDefaultMetricsSnapshot();
       }
+
+      let response = buildMetricsResponse(identity, snapshot, startedAt);
+      let validation = validateMetricsResponse(response);
+
+      if (!validation.valid) {
+        response = buildMetricsResponse(identity, createDefaultMetricsSnapshot(), startedAt);
+        validation = validateMetricsResponse(response);
+      }
+
+      if (!validation.valid) {
+        return res.status(200).json(buildMetricsResponse(identity, createDefaultMetricsSnapshot(), startedAt));
+      }
+
+      return res.status(200).json(response);
     }
   );
 
@@ -249,10 +411,13 @@ function registerPlanRoutes(app, deps = {}) {
           version: "HealthResponse_v1",
           request_id: identity.request_id,
           trace_id: identity.trace_id,
+          trace: buildOperationalTrace(identity.trace_id, startedAt, 1, ok ? 1 : 0),
           status: ok ? "ok" : "degraded",
           checks: health,
           meta: {
             latency_ms: Math.max(0, Date.now() - startedAt),
+            request_id: identity.request_id,
+            trace_id: identity.trace_id,
           },
         };
 
@@ -283,4 +448,7 @@ module.exports = {
   registerPlanRoutes,
   buildIdempotencyKey,
 };
+
+
+
 

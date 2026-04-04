@@ -87,19 +87,71 @@ function getPenaltyReasons(items) {
   }, []);
 }
 
-function getConditionHighlights(items, context) {
+function getUserState(context) {
   const safeContext = toSafeObject(context);
   const input = toSafeObject(safeContext.input);
-  const userState = toSafeObject(safeContext.userState || input.userState);
-  const conditions = toSafeArray(userState.conditions).map(normalizeString).filter(Boolean);
-  const highlights = [];
+  return toSafeObject(safeContext.userState || input.userState);
+}
 
-  if (conditions.includes("diabetes") && items.some((item) => toSafeNumber(toSafeObject(item.breakdown).nutrition, 0) >= 0.6)) {
-    highlights.push("Low glycemic scoring improved suitability for diabetes.");
+function getLowGlycemicSummary(items) {
+  const glycemicValues = items
+    .map((item) => toSafeNumber(toSafeObject(toSafeObject(item).nutrition).glycemic_index, NaN))
+    .filter((value) => Number.isFinite(value));
+
+  if (glycemicValues.length === 0) {
+    return null;
   }
 
-  if (toSafeArray(userState.risk_flags).map(normalizeString).includes("high_pitta") && items.some((item) => toSafeNumber(toSafeObject(item.breakdown).dosha, 0) >= 0.6)) {
-    highlights.push("Dosha scoring favored foods better aligned with high pitta management.");
+  const avg = glycemicValues.reduce((sum, value) => sum + value, 0) / glycemicValues.length;
+  return {
+    average: Number(avg.toFixed(1)),
+    isLow: avg <= 55,
+  };
+}
+
+function getPittaSummary(items) {
+  const pittaEffects = items
+    .map((item) => toSafeNumber(toSafeObject(item.dosha_effect).pitta, NaN))
+    .filter((value) => Number.isFinite(value));
+  const hotCount = items.filter((item) => normalizeString(toSafeObject(item.ayurveda).virya).toLowerCase() === "hot").length;
+
+  if (pittaEffects.length === 0) {
+    return null;
+  }
+
+  const avg = pittaEffects.reduce((sum, value) => sum + value, 0) / pittaEffects.length;
+  return {
+    average: Number(avg.toFixed(3)),
+    hotCount,
+  };
+}
+
+function getConditionHighlights(items, context) {
+  const userState = getUserState(context);
+  const conditions = toSafeArray(userState.conditions).map((item) => normalizeString(item).toLowerCase()).filter(Boolean);
+  const riskFlags = toSafeArray(userState.risk_flags).map((item) => normalizeString(item).toLowerCase()).filter(Boolean);
+  const highlights = [];
+
+  if (conditions.includes("diabetes")) {
+    const giSummary = getLowGlycemicSummary(items);
+    if (giSummary && giSummary.isLow) {
+      highlights.push(`Diabetes suitability maintained with low glycemic selection (avg GI ${giSummary.average}).`);
+    } else if (giSummary) {
+      highlights.push(`Diabetes guardrails considered in scoring (avg GI ${giSummary.average}).`);
+    } else {
+      highlights.push("Diabetes suitability applied through low glycemic and nutrition constraints.");
+    }
+  }
+
+  if (riskFlags.includes("high_pitta")) {
+    const pittaSummary = getPittaSummary(items);
+    if (pittaSummary && pittaSummary.average <= 0.3 && pittaSummary.hotCount === 0) {
+      highlights.push(`Pitta-focused dosha logic selected cooling/non-aggravating foods (avg pitta effect ${pittaSummary.average}).`);
+    } else if (pittaSummary) {
+      highlights.push(`Pitta dosha logic influenced selection (avg pitta effect ${pittaSummary.average}, hot items ${pittaSummary.hotCount}).`);
+    } else {
+      highlights.push("Pitta dosha compatibility was prioritized during scoring and constraints.");
+    }
   }
 
   return highlights;
@@ -138,6 +190,57 @@ function getReliabilityMessage(context) {
   }
 
   return "Fallback status=false, relaxationLevel=0. Strict decision path succeeded without relaxation.";
+}
+
+function parseMetricFromDetail(detail, key) {
+  const safeDetail = normalizeString(detail);
+  const match = safeDetail.match(new RegExp(`${key}=(-?\\d+(?:\\.\\d+)?)`, "i"));
+  return match ? Number(match[1]) : null;
+}
+
+function validateTraceAgainstContext(context, trace) {
+  const safeTrace = toSafeArray(trace);
+  const warnings = [];
+  const requiredStages = ["template", "candidate", "constraint", "scoring", "diversity", "optimizer", "reliability"];
+  const stageMap = safeTrace.reduce((acc, entry) => {
+    const stage = normalizeString(toSafeObject(entry).stage).toLowerCase();
+    if (stage) {
+      acc[stage] = toSafeObject(entry);
+    }
+    return acc;
+  }, {});
+
+  requiredStages.forEach((stage) => {
+    if (!stageMap[stage]) {
+      warnings.push(`Trace stage missing: ${stage}`);
+    }
+  });
+
+  const candidateExpected = countCandidates(toSafeObject(context).candidates);
+  const candidateDetail = normalizeString(toSafeObject(stageMap.candidate).detail);
+  if (candidateDetail) {
+    const parsedGenerated = candidateDetail.match(/generated candidates:\s*(\d+)/i);
+    if (parsedGenerated && Number(parsedGenerated[1]) !== candidateExpected) {
+      warnings.push(`Trace mismatch for candidate count: expected ${candidateExpected}, got ${parsedGenerated[1]}`);
+    }
+  }
+
+  const constraintPenaltyExpected = getTotalPenalty(context);
+  const constraintPenaltyActual = parseMetricFromDetail(toSafeObject(stageMap.constraint).detail, "totalPenalty");
+  if (constraintPenaltyActual !== null && Number(constraintPenaltyActual) !== Number(constraintPenaltyExpected)) {
+    warnings.push(`Trace mismatch for totalPenalty: expected ${constraintPenaltyExpected}, got ${constraintPenaltyActual}`);
+  }
+
+  const diversityExpected = getTotalDiversityPenalty(context);
+  const diversityActual = parseMetricFromDetail(toSafeObject(stageMap.diversity).detail, "totalDiversityPenalty");
+  if (diversityActual !== null && Number(diversityActual) !== Number(diversityExpected)) {
+    warnings.push(`Trace mismatch for totalDiversityPenalty: expected ${diversityExpected}, got ${diversityActual}`);
+  }
+
+  return {
+    valid: warnings.length === 0,
+    warnings,
+  };
 }
 
 function buildDecisionTrace(context) {
@@ -213,6 +316,11 @@ function generateStructuredExplanation(context, trace) {
     warnings.push(`Diversity penalties were applied to reduce recent repetition (totalDiversityPenalty=${totalDiversityPenalty}).`);
   }
 
+  const traceValidation = validateTraceAgainstContext(safeContext, safeTrace);
+  if (!traceValidation.valid) {
+    warnings.push(`Trace validation warnings: ${traceValidation.warnings.join(" | ")}`);
+  }
+
   if (meta.fallback) {
     warnings.push("Fallback meal was returned because valid meal generation was not possible.");
   } else if (toSafeNumber(meta.relaxationLevel, 0) > 0) {
@@ -252,4 +360,5 @@ function generateStructuredExplanation(context, trace) {
 module.exports = {
   buildDecisionTrace,
   generateStructuredExplanation,
+  validateTraceAgainstContext,
 };

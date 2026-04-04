@@ -157,9 +157,9 @@ const RESPONSE_SCHEMAS = {
   symptoms: {
     type: "object",
     additionalProperties: false,
-    required: ["symptom_tags"],
+    required: ["symptoms"],
     properties: {
-      symptom_tags: { type: "array", items: { type: "string" } },
+      symptoms: { type: "array", items: { type: "string" } },
     },
   },
 };
@@ -193,6 +193,10 @@ function createAIBoundaryError(message) {
   const error = new Error(`AI Boundary Error: ${message}`);
   error.name = "AIBoundaryError";
   return error;
+}
+
+function isAIBoundaryError(error) {
+  return Boolean(error && typeof error === "object" && error.name === "AIBoundaryError");
 }
 
 function isCircuitOpen() {
@@ -609,6 +613,110 @@ function sanitizeProfile(data) {
   };
 }
 
+function inferProfileGoalsAndSymptoms(text) {
+  const normalized = toSafeString(text).toLowerCase();
+  const goals = [];
+  const symptoms = [];
+
+  if (["weight", "fat", "obese", "loss"].some((token) => normalized.includes(token))) {
+    goals.push("GOAL_WEIGHT_LOSS");
+  }
+
+  if (["sugar", "glucose", "diabetes"].some((token) => normalized.includes(token))) {
+    goals.push("GOAL_GLUCOSE_CONTROL");
+  }
+
+  if (goals.length === 0) {
+    goals.push("GOAL_MAINTENANCE");
+  }
+
+  if (["acidity", "acid", "heartburn", "burning"].some((token) => normalized.includes(token))) {
+    symptoms.push("acidity");
+  }
+
+  if (["bloating", "bloated", "gas"].some((token) => normalized.includes(token))) {
+    symptoms.push("bloating");
+  }
+
+  if (["fatigue", "tired", "low energy"].some((token) => normalized.includes(token))) {
+    symptoms.push("fatigue");
+  }
+
+  return {
+    goals: Array.from(new Set(goals)),
+    symptoms: Array.from(new Set(symptoms)),
+  };
+}
+
+function normalizeDosha(value) {
+  const safe = toSafeObject(value);
+  const vata = Number.isFinite(safe.vata) ? safe.vata : 0;
+  const pitta = Number.isFinite(safe.pitta) ? safe.pitta : 0;
+  const kapha = Number.isFinite(safe.kapha) ? safe.kapha : 0;
+  const total = Math.max(0, vata) + Math.max(0, pitta) + Math.max(0, kapha);
+
+  if (total <= 0) {
+    return { vata: 0.34, pitta: 0.33, kapha: 0.33 };
+  }
+
+  const nv = Math.max(0, vata) / total;
+  const np = Math.max(0, pitta) / total;
+  return {
+    vata: Number(nv.toFixed(6)),
+    pitta: Number(np.toFixed(6)),
+    kapha: Number((1 - nv - np).toFixed(6)),
+  };
+}
+
+function buildProfileFallback(text) {
+  const inferred = inferProfileGoalsAndSymptoms(text);
+  return {
+    risk_flags: [],
+    goals: inferred.goals,
+    symptoms: inferred.symptoms,
+    dosha_estimate: { vata: 0.34, pitta: 0.33, kapha: 0.33 },
+    confidence: 0.3,
+  };
+}
+
+function normalizeProfileResponse(data, originalText) {
+  const safe = toSafeObject(data);
+  const inferred = inferProfileGoalsAndSymptoms(originalText);
+  const riskFlags = toSafeArray(safe.risk_flags)
+    .filter((f) => typeof f === "string")
+    .map((f) => f.trim())
+    .filter(Boolean);
+  const goals = toSafeArray(safe.goals)
+    .filter((f) => typeof f === "string")
+    .map((f) => f.trim())
+    .filter(Boolean);
+  const symptoms = toSafeArray(safe.symptoms)
+    .filter((f) => typeof f === "string")
+    .map((f) => f.trim())
+    .filter(Boolean);
+  const confidence = Number.isFinite(safe.confidence) ? Math.min(1, Math.max(0, safe.confidence)) : 0.3;
+
+  return {
+    risk_flags: riskFlags,
+    goals: goals.length > 0 ? goals : inferred.goals,
+    symptoms: symptoms.length > 0 ? symptoms : inferred.symptoms,
+    dosha_estimate: normalizeDosha(safe.dosha_estimate),
+    confidence,
+  };
+}
+
+function normalizeSymptomsResponse(data) {
+  const safe = toSafeObject(data);
+  const direct = toSafeArray(safe.symptoms);
+  const legacy = toSafeArray(safe.symptom_tags);
+  const merged = (direct.length > 0 ? direct : legacy)
+    .filter((tag) => typeof tag === "string" && tag.trim())
+    .map((tag) => tag.trim().toLowerCase());
+  return {
+    symptoms: Array.from(new Set(merged)),
+  };
+}
+
 function sanitizeExplanation(data) {
   const safe = toSafeObject(data);
   return {
@@ -636,21 +744,39 @@ async function getAIProfile(text, meta = {}) {
   const requestPayload = { text: safeInput };
 
   assertSchema("profile", "request", requestPayload, REQUEST_SCHEMAS.profile, "ai/profile", requestId);
-
-  const data = await safeFetch(AI_PROFILE_URL, requestPayload, meta);
-  assertNoForbiddenKeys(data);
-  assertSchema("profile", "response", data, RESPONSE_SCHEMAS.profile, "ai/profile", requestId);
-
-  return sanitizeProfile(data);
+  try {
+    const data = await safeFetch(AI_PROFILE_URL, requestPayload, meta);
+    const normalized = normalizeProfileResponse(data, safeInput);
+    assertNoForbiddenKeys(normalized);
+    assertSchema("profile", "response", normalized, RESPONSE_SCHEMAS.profile, "ai/profile", requestId);
+    return sanitizeProfile(normalized);
+  } catch (error) {
+    if (!isAIBoundaryError(error)) {
+      throw error;
+    }
+    logLLMFallback({ endpoint: "ai/profile", request_id: requestId, reason: "profile_fallback" });
+    return buildProfileFallback(safeInput);
+  }
 }
 
 async function getExplanation(payload, meta = {}) {
   const safePayload = toSafeObject(payload);
   const safeMeta = toSafeObject(meta);
   const requestId = toSafeString(safeMeta.request_id, "llm_explain");
+  const safeContext = toSafeObject(safePayload.context);
+  const safeReasoning = toSafeObject(safePayload.reasoning);
   const requestPayload = {
-    context: toSafeObject(safePayload.context),
-    reasoning: toSafeObject(safePayload.reasoning),
+    context: {
+      risk_flags: toSafeArray(safeContext.risk_flags).map((item) => toSafeString(item)).filter(Boolean),
+      selected_recipes: toSafeArray(safeContext.selected_recipes).map((item) => toSafeString(item)).filter(Boolean),
+      user_conditions: toSafeArray(safeContext.user_conditions).map((item) => toSafeString(item)).filter(Boolean),
+      highlights: toSafeArray(safeContext.highlights).map((item) => toSafeString(item)).filter(Boolean),
+      warnings: toSafeArray(safeContext.warnings).map((item) => toSafeString(item)).filter(Boolean),
+    },
+    reasoning: {
+      trace: toSafeArray(safeReasoning.trace).map((item) => toSafeString(item)).filter(Boolean),
+      total_score: Number.isFinite(safeReasoning.total_score) ? safeReasoning.total_score : 0,
+    },
   };
 
   assertSchema("explain", "request", requestPayload, REQUEST_SCHEMAS.explain, "ai/explain", requestId);
@@ -668,12 +794,21 @@ async function parseFeedback(text, meta = {}) {
   const requestPayload = { text: toSafeString(text) };
 
   assertSchema("feedback", "request", requestPayload, REQUEST_SCHEMAS.feedback, "ai/feedback", requestId);
-
-  const data = await safeFetch(AI_FEEDBACK_URL, requestPayload, meta);
-  assertNoForbiddenKeys(data);
-  assertSchema("feedback", "response", data, RESPONSE_SCHEMAS.feedback, "ai/feedback", requestId);
-
-  return sanitizeFeedback(data);
+  try {
+    const data = await safeFetch(AI_FEEDBACK_URL, requestPayload, meta);
+    assertNoForbiddenKeys(data);
+    assertSchema("feedback", "response", data, RESPONSE_SCHEMAS.feedback, "ai/feedback", requestId);
+    return sanitizeFeedback(data);
+  } catch (error) {
+    if (!isAIBoundaryError(error)) {
+      throw error;
+    }
+    logLLMFallback({ endpoint: "ai/feedback", request_id: requestId, reason: "feedback_fallback" });
+    return {
+      feedback_type: "DISLIKE",
+      target: "",
+    };
+  }
 }
 
 async function parseFeedbackWithLLM(feedbackInput, meta = {}) {
@@ -686,16 +821,25 @@ async function parseSymptoms(text, meta = {}) {
   const requestPayload = { text: toSafeString(text) };
 
   assertSchema("symptoms", "request", requestPayload, REQUEST_SCHEMAS.symptoms, "ml/parse", requestId);
-
-  const data = await safeFetch(ML_PARSE_URL, requestPayload, meta);
-  assertNoForbiddenKeys(data);
-  assertSchema("symptoms", "response", data, RESPONSE_SCHEMAS.symptoms, "ml/parse", requestId);
-
-  return {
-    symptom_tags: data.symptom_tags
-      .filter((tag) => typeof tag === "string" && tag.trim())
-      .map((tag) => tag.trim().toLowerCase()),
-  };
+  try {
+    const data = await safeFetch(ML_PARSE_URL, requestPayload, meta);
+    const normalized = normalizeSymptomsResponse(data);
+    assertNoForbiddenKeys(normalized);
+    assertSchema("symptoms", "response", normalized, RESPONSE_SCHEMAS.symptoms, "ml/parse", requestId);
+    return {
+      symptoms: normalized.symptoms,
+      symptom_tags: normalized.symptoms,
+    };
+  } catch (error) {
+    if (!isAIBoundaryError(error)) {
+      throw error;
+    }
+    logLLMFallback({ endpoint: "ml/parse", request_id: requestId, reason: "parse_fallback" });
+    return {
+      symptoms: [],
+      symptom_tags: [],
+    };
+  }
 }
 
 const healthInterval = setInterval(() => {
@@ -725,5 +869,4 @@ module.exports = {
   assertNoForbiddenKeys,
   _circuitState: circuitState,
 };
-
 

@@ -19,9 +19,12 @@ function createRateLimiter({ windowMs = 60000, max = 120 } = {}) {
     if (current.count > max) {
       res.statusCode = 429;
       res.setHeader("Content-Type", "application/json");
+      const headers = req && req.headers && typeof req.headers === "object" ? req.headers : {};
       res.end(JSON.stringify(buildErrorResponse({
         code: "RATE_LIMITED",
         message: "Rate limit exceeded",
+        request_id: headers["x-request-id"] || "unknown_request",
+        trace_id: headers["x-trace-id"] || "unknown_trace",
         details: {
           source: "rateLimiter",
           window_ms: windowMs,
@@ -38,3 +41,4 @@ function createRateLimiter({ windowMs = 60000, max = 120 } = {}) {
 module.exports = {
   createRateLimiter,
 };
+

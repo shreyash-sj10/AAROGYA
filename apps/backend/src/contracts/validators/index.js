@@ -5,6 +5,8 @@ const weeklyDecisionRequestSchema = require("../schemas/weekly-decision-request.
 const weeklyDecisionResponseSchema = require("../schemas/weekly-decision-response.v1.schema.json");
 const healthResponseSchema = require("../schemas/health-response.v1.schema.json");
 const metricsResponseSchema = require("../schemas/metrics-response.v1.schema.json");
+const errorResponseSchema = require("../schemas/error-response.v1.schema.json");
+const assistantResponseSchema = require("../schemas/assistant-response.v1.schema.json");
 const { createValidatorFactory } = require("./factory");
 
 const compiled = createValidatorFactory({
@@ -21,4 +23,7 @@ module.exports = {
   weeklyDecisionResponseSchema,
   healthResponseSchema,
   metricsResponseSchema,
+  errorResponseSchema,
+  assistantResponseSchema,
 };
+

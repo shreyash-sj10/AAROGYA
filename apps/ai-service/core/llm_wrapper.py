@@ -29,6 +29,36 @@ def _extract_text(parsed):
     return ""
 
 
+def llm_health_status():
+    if not LLM_ENDPOINT:
+        return {
+            "ok": False,
+            "reason": "AI_LLM_ENDPOINT is not configured",
+            "endpoint": "",
+        }
+
+    req = request.Request(LLM_ENDPOINT, method="GET")
+    try:
+        with request.urlopen(req, timeout=LLM_TIMEOUT_SEC) as response:
+            return {
+                "ok": 200 <= int(getattr(response, "status", 200)) < 500,
+                "reason": "reachable",
+                "endpoint": LLM_ENDPOINT,
+            }
+    except error.HTTPError as http_error:
+        return {
+            "ok": True,
+            "reason": f"reachable_http_{http_error.code}",
+            "endpoint": LLM_ENDPOINT,
+        }
+    except (error.URLError, TimeoutError, ValueError):
+        return {
+            "ok": False,
+            "reason": "endpoint_unreachable",
+            "endpoint": LLM_ENDPOINT,
+        }
+
+
 def call_llm(prompt: str) -> str:
     safe_prompt = (prompt or "").strip()
     if not safe_prompt:

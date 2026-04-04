@@ -1,7 +1,8 @@
-const { getBestTemplate } = require("../../templates/mealTemplate.service");
+const { getBestTemplate, extractCategories } = require("../../templates/mealTemplate.service");
 const { generateCandidates, computeScoreLite } = require("../candidate/candidateGenerator");
 const { filterFoods } = require("../../rules/engine/constraintEngine");
 const { ContractViolationError } = require("../../contracts/errors/ContractViolationError");
+const { sampleFoods } = require("../food/food.samples");
 
 function toSafeArray(value) {
   return Array.isArray(value) ? value : [];
@@ -123,9 +124,62 @@ function toInternalFallbackResult(selected, level, reason) {
   };
 }
 
+function pickPoolFoods(contextFoods) {
+  const primary = toSafeArray(contextFoods).filter((food) => food && typeof food === "object");
+  if (primary.length > 0) {
+    return primary;
+  }
+  return toSafeArray(sampleFoods).filter((food) => food && typeof food === "object");
+}
+
+function ensureEmergencyCandidate(template, foods) {
+  const safeFoods = toSafeArray(foods);
+  if (safeFoods.length > 0) {
+    return safeFoods;
+  }
+
+  const preferredCategory = toSafeArray(extractCategories(template))[0] || "vegetable";
+  return [{
+    id: "emergency-safe-001",
+    recipe_id: "emergency-safe-001",
+    name: "Steamed Bottle Gourd",
+    category: preferredCategory,
+    ayurveda: {
+      rasa: ["sweet"],
+      guna: ["light"],
+      virya: "cold",
+      vipaka: "sweet",
+    },
+    dosha_effect: {
+      vata: -0.2,
+      pitta: -0.4,
+      kapha: -0.2,
+    },
+    functional: {
+      digestibility_score: 0.9,
+      heaviness_score: 0.2,
+    },
+    nutrition: {
+      calories: 18,
+      protein: 0.8,
+      carbs: 3.5,
+      fat: 0.2,
+      glycemic_index: 15,
+    },
+    meta: {
+      is_vegetarian: true,
+    },
+    evaluation: {
+      isValid: true,
+      totalPenalty: 0,
+      triggeredRules: [],
+    },
+  }];
+}
+
 function generateSafeFallback(context) {
   const safeContext = toSafeObject(context);
-  const mealType = typeof safeContext.mealType === "string" ? safeContext.mealType : "";
+  const mealType = (typeof safeContext.mealType === "string" && safeContext.mealType.trim()) ? safeContext.mealType.trim() : "lunch";
   const template = getBestTemplate(mealType);
 
   if (!template) {
@@ -136,16 +190,21 @@ function generateSafeFallback(context) {
   }
 
   const p0Rules = extractP0Rules(safeContext.rules);
+  const poolFoods = ensureEmergencyCandidate(template, pickPoolFoods(safeContext.foods));
   const candidatesByCategory = generateCandidates(
     template,
-    toSafeArray(safeContext.foods),
+    poolFoods,
     toSafeObject(safeContext.userState),
     p0Rules,
-    { topK: 1 }
+    { topK: 3 }
   );
 
   const minimalSet = flattenCandidateFoods(candidatesByCategory);
-  const filtered = filterFoods(minimalSet, toSafeObject(safeContext.userState), p0Rules);
+  const searchSet = minimalSet.length > 0
+    ? minimalSet
+    : poolFoods.map((food) => ({ ...toSafeObject(food) }));
+
+  const filtered = filterFoods(searchSet, toSafeObject(safeContext.userState), p0Rules);
   const validFoods = toSafeArray(filtered.validFoods).sort(compareFallbackFood);
 
   if (validFoods.length === 0) {
@@ -177,7 +236,7 @@ function relaxRulesKeepingP0(rules, level) {
 
 function runPipelineAttempt(baseContext, activeRules, level, reason) {
   const safeContext = toSafeObject(baseContext);
-  const mealType = typeof safeContext.mealType === "string" ? safeContext.mealType : "";
+  const mealType = (typeof safeContext.mealType === "string" && safeContext.mealType.trim()) ? safeContext.mealType.trim() : "lunch";
   const template = getBestTemplate(mealType);
 
   if (!template) {
@@ -190,7 +249,7 @@ function runPipelineAttempt(baseContext, activeRules, level, reason) {
 
   const candidates = generateCandidates(
     template,
-    toSafeArray(safeContext.foods),
+    pickPoolFoods(safeContext.foods),
     toSafeObject(safeContext.userState),
     toSafeArray(activeRules)
   );
@@ -229,5 +288,4 @@ module.exports = {
   getFallbackMeal,
   generateSafeFallback,
 };
-
 

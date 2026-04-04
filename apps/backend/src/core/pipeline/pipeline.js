@@ -1,4 +1,4 @@
-const { normalizeUserHistory, normalizeUserState, toSafeArray } = require("../../utils/normalizeInput");
+const { normalizeUserHistory, normalizeUserState, toSafeArray, toSafeNumber } = require("../../utils/normalizeInput");
 const { getBestTemplate } = require("../../templates/mealTemplate.service");
 const { generateCandidates } = require("../../modules/candidate/candidateGenerator");
 const { applyConstraints } = require("../../modules/constraint/constraintEngine");
@@ -128,12 +128,26 @@ function runPipeline(input) {
   };
 }
 
+function runPipelineLegacy(input) {
+  const result = runPipeline(input);
+  const meal = toSafeArray(result && result.mealResult && result.mealResult.meal);
+  const score = toSafeNumber(result && result.mealResult && result.mealResult.score, 0);
+
+  return {
+    meal,
+    score,
+    explanation: "Deterministic pipeline selection",
+  };
+}
 if (require.main === module) {
   throw new Error("Pipeline cannot be executed directly");
 }
 
 module.exports = {
   _runPipelineInternal: runPipeline,
+  runPipeline: runPipelineLegacy,
 };
+
+
 
 

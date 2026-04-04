@@ -1,56 +1,120 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "HealthResponse_v1",
-  "title": "HealthResponse_v1",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["version", "request_id", "trace_id", "status", "checks", "meta"],
-  "properties": {
-    "version": { "type": "string", "const": "HealthResponse_v1" },
-    "request_id": { "type": "string", "minLength": 1 },
-    "trace_id": { "type": "string", "minLength": 1 },
-    "status": { "type": "string", "enum": ["ok", "degraded"] },
-    "checks": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["db", "redis", "ai"],
-      "properties": {
-        "db": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["ok"],
-          "properties": {
-            "ok": { "type": "boolean" },
-            "error": { "type": "string" }
-          }
-        },
-        "redis": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["ok"],
-          "properties": {
-            "ok": { "type": "boolean" },
-            "error": { "type": "string" }
-          }
-        },
-        "ai": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["ok"],
-          "properties": {
-            "ok": { "type": "boolean" },
-            "error": { "type": "string" }
-          }
-        }
-      }
-    },
-    "meta": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["latency_ms"],
-      "properties": {
-        "latency_ms": { "type": "integer", "minimum": 0 }
-      }
-    }
-  }
+    "$schema":  "http://json-schema.org/draft-07/schema#",
+    "$id":  "HealthResponse_v1",
+    "title":  "HealthResponse_v1",
+    "type":  "object",
+    "additionalProperties":  false,
+    "required":  [
+                     "version",
+                     "request_id",
+                     "trace_id",
+                     "trace",
+                     "status",
+                     "checks",
+                     "meta"
+                 ],
+    "properties":  {
+                       "version":  {
+                                       "type":  "string",
+                                       "const":  "HealthResponse_v1"
+                                   },
+                       "request_id":  {
+                                          "type":  "string",
+                                          "minLength":  1
+                                      },
+                       "trace_id":  {
+                                        "type":  "string",
+                                        "minLength":  1,
+                                        "description":  "Endpoint-level trace reference. Full Trace_v1 object is not included in this response."
+                                    },
+                       "status":  {
+                                      "type":  "string",
+                                      "enum":  [
+                                                   "ok",
+                                                   "degraded"
+                                               ]
+                                  },
+                       "checks":  {
+                                      "type":  "object",
+                                      "additionalProperties":  false,
+                                      "required":  [
+                                                       "db",
+                                                       "redis",
+                                                       "ai"
+                                                   ],
+                                      "properties":  {
+                                                         "db":  {
+                                                                    "type":  "object",
+                                                                    "additionalProperties":  false,
+                                                                    "required":  [
+                                                                                     "ok"
+                                                                                 ],
+                                                                    "properties":  {
+                                                                                       "ok":  {
+                                                                                                  "type":  "boolean"
+                                                                                              },
+                                                                                       "error":  {
+                                                                                                     "type":  "string"
+                                                                                                 }
+                                                                                   }
+                                                                },
+                                                         "redis":  {
+                                                                       "type":  "object",
+                                                                       "additionalProperties":  false,
+                                                                       "required":  [
+                                                                                        "ok"
+                                                                                    ],
+                                                                       "properties":  {
+                                                                                          "ok":  {
+                                                                                                     "type":  "boolean"
+                                                                                                 },
+                                                                                          "error":  {
+                                                                                                        "type":  "string"
+                                                                                                    }
+                                                                                      }
+                                                                   },
+                                                         "ai":  {
+                                                                    "type":  "object",
+                                                                    "additionalProperties":  false,
+                                                                    "required":  [
+                                                                                     "ok"
+                                                                                 ],
+                                                                    "properties":  {
+                                                                                       "ok":  {
+                                                                                                  "type":  "boolean"
+                                                                                              },
+                                                                                       "error":  {
+                                                                                                     "type":  "string"
+                                                                                                 }
+                                                                                   }
+                                                                }
+                                                     }
+                                  },
+                       "meta":  {
+                                    "type":  "object",
+                                    "additionalProperties":  false,
+                                    "required":  [
+                                                     "latency_ms",
+                                                     "request_id",
+                                                     "trace_id"
+                                                 ],
+                                    "properties":  {
+                                                       "latency_ms":  {
+                                                                          "type":  "integer",
+                                                                          "minimum":  0
+                                                                      },
+                                                       "request_id":  {
+                                                                          "type":  "string",
+                                                                          "minLength":  1
+                                                                      },
+                                                       "trace_id":  {
+                                                                        "type":  "string",
+                                                                        "minLength":  1
+                                                                    }
+                                                   }
+                                },
+                       "trace":  {
+                                     "$ref":  "Trace_v1"
+                                 }
+                   }
 }

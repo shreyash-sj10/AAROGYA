@@ -1,134 +1,361 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "MetricsResponse_v1",
-  "title": "MetricsResponse_v1",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "version",
-    "request_id",
-    "trace_id",
-    "request_count",
-    "avg_latency",
-    "p95_latency",
-    "p99_latency",
-    "avg_pipeline_ms",
-    "avg_optimizer_ms",
-    "avg_candidate_count",
-    "fallback_rate",
-    "totals",
-    "last_request",
-    "confidence_distribution",
-    "errors",
-    "ai_metrics",
-    "ai_disagreement",
-    "meta"
-  ],
-  "properties": {
-    "version": { "type": "string", "const": "MetricsResponse_v1" },
-    "request_id": { "type": "string", "minLength": 1 },
-    "trace_id": { "type": "string", "minLength": 1 },
-    "request_count": { "type": "integer", "minimum": 0 },
-    "avg_latency": { "type": "number", "minimum": 0 },
-    "p95_latency": { "type": "number", "minimum": 0 },
-    "p99_latency": { "type": "number", "minimum": 0 },
-    "avg_pipeline_ms": { "type": "number", "minimum": 0 },
-    "avg_optimizer_ms": { "type": "number", "minimum": 0 },
-    "avg_candidate_count": { "type": "number", "minimum": 0 },
-    "fallback_rate": { "type": "number", "minimum": 0, "maximum": 1 },
-    "totals": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["pipeline_ms", "optimizer_ms", "candidate_count", "fallback_count"],
-      "properties": {
-        "pipeline_ms": { "type": "number", "minimum": 0 },
-        "optimizer_ms": { "type": "number", "minimum": 0 },
-        "candidate_count": { "type": "integer", "minimum": 0 },
-        "fallback_count": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "last_request": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["latency_ms", "pipeline_ms", "optimizer_ms", "candidate_count", "used_fallback", "confidence_level"],
-      "properties": {
-        "latency_ms": { "type": "number", "minimum": 0 },
-        "pipeline_ms": { "type": "number", "minimum": 0 },
-        "optimizer_ms": { "type": "number", "minimum": 0 },
-        "candidate_count": { "type": "integer", "minimum": 0 },
-        "used_fallback": { "type": "boolean" },
-        "confidence_level": { "type": "string", "enum": ["low", "medium", "high"] }
-      }
-    },
-    "confidence_distribution": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["low", "medium", "high"],
-      "properties": {
-        "low": { "type": "integer", "minimum": 0 },
-        "medium": { "type": "integer", "minimum": 0 },
-        "high": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "errors": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["SCHEMA_VALIDATION_FAILED", "OPTIMIZER_FAILURE", "AI_FAILURE", "CACHE_ERROR", "CACHE_PARSE_ERROR", "SYSTEM_ERROR"],
-      "properties": {
-        "SCHEMA_VALIDATION_FAILED": { "type": "integer", "minimum": 0 },
-        "OPTIMIZER_FAILURE": { "type": "integer", "minimum": 0 },
-        "AI_FAILURE": { "type": "integer", "minimum": 0 },
-        "CACHE_ERROR": { "type": "integer", "minimum": 0 },
-        "CACHE_PARSE_ERROR": { "type": "integer", "minimum": 0 },
-        "SYSTEM_ERROR": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "ai_metrics": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["request_count", "response_count", "schema_valid_count", "schema_invalid_count", "fallback_count", "avg_latency_ms", "schema_compliance_rate", "invalid_response_rate", "fallback_rate", "latency_histogram"],
-      "properties": {
-        "request_count": { "type": "integer", "minimum": 0 },
-        "response_count": { "type": "integer", "minimum": 0 },
-        "schema_valid_count": { "type": "integer", "minimum": 0 },
-        "schema_invalid_count": { "type": "integer", "minimum": 0 },
-        "fallback_count": { "type": "integer", "minimum": 0 },
-        "avg_latency_ms": { "type": "number", "minimum": 0 },
-        "schema_compliance_rate": { "type": "number", "minimum": 0, "maximum": 1 },
-        "invalid_response_rate": { "type": "number", "minimum": 0, "maximum": 1 },
-        "fallback_rate": { "type": "number", "minimum": 0, "maximum": 1 },
-        "latency_histogram": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["le_50ms", "le_100ms", "le_250ms", "le_500ms", "le_1000ms", "gt_1000ms"],
-          "properties": {
-            "le_50ms": { "type": "integer", "minimum": 0 },
-            "le_100ms": { "type": "integer", "minimum": 0 },
-            "le_250ms": { "type": "integer", "minimum": 0 },
-            "le_500ms": { "type": "integer", "minimum": 0 },
-            "le_1000ms": { "type": "integer", "minimum": 0 },
-            "gt_1000ms": { "type": "integer", "minimum": 0 }
-          }
-        }
-      }
-    },
-    "ai_disagreement": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["compared_count", "mismatch_count", "mismatch_rate"],
-      "properties": {
-        "compared_count": { "type": "integer", "minimum": 0 },
-        "mismatch_count": { "type": "integer", "minimum": 0 },
-        "mismatch_rate": { "type": "number", "minimum": 0, "maximum": 1 }
-      }
-    },
-    "meta": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["latency_ms"],
-      "properties": {
-        "latency_ms": { "type": "integer", "minimum": 0 }
-      }
-    }
-  }
+    "$schema":  "http://json-schema.org/draft-07/schema#",
+    "$id":  "MetricsResponse_v1",
+    "title":  "MetricsResponse_v1",
+    "type":  "object",
+    "additionalProperties":  false,
+    "required":  [
+                     "version",
+                     "request_id",
+                     "trace_id",
+                     "trace",
+                     "api_request_count",
+                     "api_error_count",
+                     "request_count",
+                     "avg_latency",
+                     "p95_latency",
+                     "p99_latency",
+                     "avg_pipeline_ms",
+                     "avg_optimizer_ms",
+                     "avg_candidate_count",
+                     "fallback_rate",
+                     "totals",
+                     "last_request",
+                     "confidence_distribution",
+                     "errors",
+                     "ai_metrics",
+                     "ai_disagreement",
+                     "meta"
+                 ],
+    "properties":  {
+                       "version":  {
+                                       "type":  "string",
+                                       "const":  "MetricsResponse_v1"
+                                   },
+                       "request_id":  {
+                                          "type":  "string",
+                                          "minLength":  1
+                                      },
+                       "trace_id":  {
+                                        "type":  "string",
+                                        "minLength":  1,
+                                        "description":  "Endpoint-level trace reference. Full Trace_v1 object is not included in this response."
+                                    },
+                       "api_request_count":  {
+                                                 "type":  "integer",
+                                                 "minimum":  0
+                                             },
+                       "api_error_count":  {
+                                               "type":  "integer",
+                                               "minimum":  0
+                                           },
+                       "request_count":  {
+                                             "type":  "integer",
+                                             "minimum":  0
+                                         },
+                       "avg_latency":  {
+                                           "type":  "number",
+                                           "minimum":  0
+                                       },
+                       "p95_latency":  {
+                                           "type":  "number",
+                                           "minimum":  0
+                                       },
+                       "p99_latency":  {
+                                           "type":  "number",
+                                           "minimum":  0
+                                       },
+                       "avg_pipeline_ms":  {
+                                               "type":  "number",
+                                               "minimum":  0
+                                           },
+                       "avg_optimizer_ms":  {
+                                                "type":  "number",
+                                                "minimum":  0
+                                            },
+                       "avg_candidate_count":  {
+                                                   "type":  "number",
+                                                   "minimum":  0
+                                               },
+                       "fallback_rate":  {
+                                             "type":  "number",
+                                             "minimum":  0,
+                                             "maximum":  1
+                                         },
+                       "totals":  {
+                                      "type":  "object",
+                                      "additionalProperties":  false,
+                                      "required":  [
+                                                       "pipeline_ms",
+                                                       "optimizer_ms",
+                                                       "candidate_count",
+                                                       "fallback_count"
+                                                   ],
+                                      "properties":  {
+                                                         "pipeline_ms":  {
+                                                                             "type":  "number",
+                                                                             "minimum":  0
+                                                                         },
+                                                         "optimizer_ms":  {
+                                                                              "type":  "number",
+                                                                              "minimum":  0
+                                                                          },
+                                                         "candidate_count":  {
+                                                                                 "type":  "integer",
+                                                                                 "minimum":  0
+                                                                             },
+                                                         "fallback_count":  {
+                                                                                "type":  "integer",
+                                                                                "minimum":  0
+                                                                            }
+                                                     }
+                                  },
+                       "last_request":  {
+                                            "type":  "object",
+                                            "additionalProperties":  false,
+                                            "required":  [
+                                                             "latency_ms",
+                                                             "pipeline_ms",
+                                                             "optimizer_ms",
+                                                             "candidate_count",
+                                                             "used_fallback",
+                                                             "confidence_level"
+                                                         ],
+                                            "properties":  {
+                                                               "latency_ms":  {
+                                                                                  "type":  "number",
+                                                                                  "minimum":  0
+                                                                              },
+                                                               "pipeline_ms":  {
+                                                                                   "type":  "number",
+                                                                                   "minimum":  0
+                                                                               },
+                                                               "optimizer_ms":  {
+                                                                                    "type":  "number",
+                                                                                    "minimum":  0
+                                                                                },
+                                                               "candidate_count":  {
+                                                                                       "type":  "integer",
+                                                                                       "minimum":  0
+                                                                                   },
+                                                               "used_fallback":  {
+                                                                                     "type":  "boolean"
+                                                                                 },
+                                                               "confidence_level":  {
+                                                                                        "type":  "string",
+                                                                                        "enum":  [
+                                                                                                     "low",
+                                                                                                     "medium",
+                                                                                                     "high"
+                                                                                                 ]
+                                                                                    }
+                                                           }
+                                        },
+                       "confidence_distribution":  {
+                                                       "type":  "object",
+                                                       "additionalProperties":  false,
+                                                       "required":  [
+                                                                        "low",
+                                                                        "medium",
+                                                                        "high"
+                                                                    ],
+                                                       "properties":  {
+                                                                          "low":  {
+                                                                                      "type":  "integer",
+                                                                                      "minimum":  0
+                                                                                  },
+                                                                          "medium":  {
+                                                                                         "type":  "integer",
+                                                                                         "minimum":  0
+                                                                                     },
+                                                                          "high":  {
+                                                                                       "type":  "integer",
+                                                                                       "minimum":  0
+                                                                                   }
+                                                                      }
+                                                   },
+                       "errors":  {
+                                      "type":  "object",
+                                      "additionalProperties":  false,
+                                      "required":  [
+                                                       "SCHEMA_VALIDATION_FAILED",
+                                                       "OPTIMIZER_FAILURE",
+                                                       "AI_FAILURE",
+                                                       "CACHE_ERROR",
+                                                       "CACHE_PARSE_ERROR",
+                                                       "SYSTEM_ERROR"
+                                                   ],
+                                      "properties":  {
+                                                         "SCHEMA_VALIDATION_FAILED":  {
+                                                                                          "type":  "integer",
+                                                                                          "minimum":  0
+                                                                                      },
+                                                         "OPTIMIZER_FAILURE":  {
+                                                                                   "type":  "integer",
+                                                                                   "minimum":  0
+                                                                               },
+                                                         "AI_FAILURE":  {
+                                                                            "type":  "integer",
+                                                                            "minimum":  0
+                                                                        },
+                                                         "CACHE_ERROR":  {
+                                                                             "type":  "integer",
+                                                                             "minimum":  0
+                                                                         },
+                                                         "CACHE_PARSE_ERROR":  {
+                                                                                   "type":  "integer",
+                                                                                   "minimum":  0
+                                                                               },
+                                                         "SYSTEM_ERROR":  {
+                                                                              "type":  "integer",
+                                                                              "minimum":  0
+                                                                          }
+                                                     }
+                                  },
+                       "ai_metrics":  {
+                                          "type":  "object",
+                                          "additionalProperties":  false,
+                                          "required":  [
+                                                           "request_count",
+                                                           "response_count",
+                                                           "schema_valid_count",
+                                                           "schema_invalid_count",
+                                                           "fallback_count",
+                                                           "avg_latency_ms",
+                                                           "schema_compliance_rate",
+                                                           "invalid_response_rate",
+                                                           "fallback_rate",
+                                                           "latency_histogram"
+                                                       ],
+                                          "properties":  {
+                                                             "request_count":  {
+                                                                                   "type":  "integer",
+                                                                                   "minimum":  0
+                                                                               },
+                                                             "response_count":  {
+                                                                                    "type":  "integer",
+                                                                                    "minimum":  0
+                                                                                },
+                                                             "schema_valid_count":  {
+                                                                                        "type":  "integer",
+                                                                                        "minimum":  0
+                                                                                    },
+                                                             "schema_invalid_count":  {
+                                                                                          "type":  "integer",
+                                                                                          "minimum":  0
+                                                                                      },
+                                                             "fallback_count":  {
+                                                                                    "type":  "integer",
+                                                                                    "minimum":  0
+                                                                                },
+                                                             "avg_latency_ms":  {
+                                                                                    "type":  "number",
+                                                                                    "minimum":  0
+                                                                                },
+                                                             "schema_compliance_rate":  {
+                                                                                            "type":  "number",
+                                                                                            "minimum":  0,
+                                                                                            "maximum":  1
+                                                                                        },
+                                                             "invalid_response_rate":  {
+                                                                                           "type":  "number",
+                                                                                           "minimum":  0,
+                                                                                           "maximum":  1
+                                                                                       },
+                                                             "fallback_rate":  {
+                                                                                   "type":  "number",
+                                                                                   "minimum":  0,
+                                                                                   "maximum":  1
+                                                                               },
+                                                             "latency_histogram":  {
+                                                                                       "type":  "object",
+                                                                                       "additionalProperties":  false,
+                                                                                       "required":  [
+                                                                                                        "le_50ms",
+                                                                                                        "le_100ms",
+                                                                                                        "le_250ms",
+                                                                                                        "le_500ms",
+                                                                                                        "le_1000ms",
+                                                                                                        "gt_1000ms"
+                                                                                                    ],
+                                                                                       "properties":  {
+                                                                                                          "le_50ms":  {
+                                                                                                                          "type":  "integer",
+                                                                                                                          "minimum":  0
+                                                                                                                      },
+                                                                                                          "le_100ms":  {
+                                                                                                                           "type":  "integer",
+                                                                                                                           "minimum":  0
+                                                                                                                       },
+                                                                                                          "le_250ms":  {
+                                                                                                                           "type":  "integer",
+                                                                                                                           "minimum":  0
+                                                                                                                       },
+                                                                                                          "le_500ms":  {
+                                                                                                                           "type":  "integer",
+                                                                                                                           "minimum":  0
+                                                                                                                       },
+                                                                                                          "le_1000ms":  {
+                                                                                                                            "type":  "integer",
+                                                                                                                            "minimum":  0
+                                                                                                                        },
+                                                                                                          "gt_1000ms":  {
+                                                                                                                            "type":  "integer",
+                                                                                                                            "minimum":  0
+                                                                                                                        }
+                                                                                                      }
+                                                                                   }
+                                                         }
+                                      },
+                       "ai_disagreement":  {
+                                               "type":  "object",
+                                               "additionalProperties":  false,
+                                               "required":  [
+                                                                "compared_count",
+                                                                "mismatch_count",
+                                                                "mismatch_rate"
+                                                            ],
+                                               "properties":  {
+                                                                  "compared_count":  {
+                                                                                         "type":  "integer",
+                                                                                         "minimum":  0
+                                                                                     },
+                                                                  "mismatch_count":  {
+                                                                                         "type":  "integer",
+                                                                                         "minimum":  0
+                                                                                     },
+                                                                  "mismatch_rate":  {
+                                                                                        "type":  "number",
+                                                                                        "minimum":  0,
+                                                                                        "maximum":  1
+                                                                                    }
+                                                              }
+                                           },
+                       "meta":  {
+                                    "type":  "object",
+                                    "additionalProperties":  false,
+                                    "required":  [
+                                                     "latency_ms",
+                                                     "request_id",
+                                                     "trace_id"
+                                                 ],
+                                    "properties":  {
+                                                       "latency_ms":  {
+                                                                          "type":  "integer",
+                                                                          "minimum":  0
+                                                                      },
+                                                       "request_id":  {
+                                                                          "type":  "string",
+                                                                          "minLength":  1
+                                                                      },
+                                                       "trace_id":  {
+                                                                        "type":  "string",
+                                                                        "minLength":  1
+                                                                    }
+                                                   }
+                                },
+                       "trace":  {
+                                     "$ref":  "Trace_v1"
+                                 }
+                   }
 }

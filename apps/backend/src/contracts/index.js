@@ -5,6 +5,8 @@ const weeklyDecisionRequestSchema = require("./schemas/weekly-decision-request.v
 const weeklyDecisionResponseSchema = require("./schemas/weekly-decision-response.v1.schema.json");
 const healthResponseSchema = require("./schemas/health-response.v1.schema.json");
 const metricsResponseSchema = require("./schemas/metrics-response.v1.schema.json");
+const errorResponseSchema = require("./schemas/error-response.v1.schema.json");
+const assistantResponseSchema = require("./schemas/assistant-response.v1.schema.json");
 
 const schemas = {
   DecisionRequest_v1: decisionRequestSchema,
@@ -14,6 +16,8 @@ const schemas = {
   WeeklyDecisionResponse_v1: weeklyDecisionResponseSchema,
   HealthResponse_v1: healthResponseSchema,
   MetricsResponse_v1: metricsResponseSchema,
+  ErrorResponse_v1: errorResponseSchema,
+  AssistantResponse_v1: assistantResponseSchema,
 };
 
 const validators = require("./validators");
@@ -27,5 +31,8 @@ module.exports = {
   weeklyDecisionResponseSchema,
   healthResponseSchema,
   metricsResponseSchema,
+  errorResponseSchema,
+  assistantResponseSchema,
   validators,
 };
+

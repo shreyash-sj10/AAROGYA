@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -47,7 +47,32 @@ def _normalize_dosha(dosha: Dict[str, Any]) -> Dict[str, float]:
     return {"vata": nv, "pitta": np, "kapha": round(1 - nv - np, 6)}
 
 
-def _parse_profile(raw_text: str) -> Dict[str, Any]:
+def _infer_goals_and_symptoms(text: str) -> Dict[str, List[str]]:
+    normalized = (text or "").strip().lower()
+    goals: List[str] = []
+    symptoms: List[str] = []
+
+    if any(token in normalized for token in ["weight", "fat", "obese", "loss"]):
+        goals.append("GOAL_WEIGHT_LOSS")
+    if any(token in normalized for token in ["sugar", "glucose", "diabetes"]):
+        goals.append("GOAL_GLUCOSE_CONTROL")
+    if not goals:
+        goals.append("GOAL_MAINTENANCE")
+
+    if any(token in normalized for token in ["acidity", "acid", "heartburn", "burning"]):
+        symptoms.append("acidity")
+    if any(token in normalized for token in ["bloating", "bloated", "gas"]):
+        symptoms.append("bloating")
+    if any(token in normalized for token in ["fatigue", "tired", "low energy"]):
+        symptoms.append("fatigue")
+
+    return {
+        "goals": list(dict.fromkeys(goals)),
+        "symptoms": list(dict.fromkeys(symptoms)),
+    }
+
+
+def _parse_profile(raw_text: str, original_text: str) -> Dict[str, Any]:
     parsed = json.loads(raw_text)
 
     if not isinstance(parsed, dict):
@@ -62,9 +87,12 @@ def _parse_profile(raw_text: str) -> Dict[str, Any]:
 
     safe_flags = [str(flag).strip() for flag in risk_flags if isinstance(flag, str) and str(flag).strip()]
     safe_confidence = max(0.0, min(1.0, float(confidence if isinstance(confidence, (int, float)) else 0.0)))
+    inferred = _infer_goals_and_symptoms(original_text)
 
     return {
         "risk_flags": safe_flags,
+        "goals": inferred["goals"],
+        "symptoms": inferred["symptoms"],
         "dosha_estimate": _normalize_dosha(dosha_estimate),
         "confidence": safe_confidence,
     }
@@ -95,10 +123,17 @@ def ai_profile(payload: ProfileRequest):
 
     raw = call_llm(prompt)
     if not raw:
-        return _failure("LLM_UNAVAILABLE", "LLM returned empty response")
+        inferred = _infer_goals_and_symptoms(text)
+        return _success({
+            "risk_flags": [],
+            "goals": inferred["goals"],
+            "symptoms": inferred["symptoms"],
+            "dosha_estimate": {"vata": 0.34, "pitta": 0.33, "kapha": 0.33},
+            "confidence": 0.3,
+        })
 
     try:
-        data = _parse_profile(raw)
+        data = _parse_profile(raw, text)
         return _success(data)
     except (json.JSONDecodeError, ValueError, TypeError) as error:
         return _failure("INVALID_PROFILE_JSON", str(error))

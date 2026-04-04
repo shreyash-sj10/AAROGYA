@@ -126,7 +126,9 @@ function buildValidRequestBody() {
   await executeHandlers(routes["/plan"], invalidReq, invalidRes);
 
   assert(invalidRes.statusCode === 400, "Invalid payload must return HTTP 400");
-  assert(invalidRes.body && invalidRes.body.version === "v1", "Invalid payload must return versioned error envelope");
+  assert(invalidRes.body && invalidRes.body.version === "ErrorResponse_v1", "Invalid payload must return ErrorResponse_v1 envelope");
+  assert(invalidRes.body && typeof invalidRes.body.request_id === "string", "Error payload must include top-level request_id");
+  assert(invalidRes.body && invalidRes.body.trace && invalidRes.body.trace.version === "Trace_v1", "Error payload must include top-level Trace_v1");
   assert(invalidRes.body && invalidRes.body.error && invalidRes.body.error.code === "VALIDATION_ERROR", "Invalid payload must return validation code");
   assert(Array.isArray((invalidRes.body.error && invalidRes.body.error.details && invalidRes.body.error.details.errors) || []), "Invalid payload must include details.errors array");
   assert(orchestratorCallCount === 0, "Invalid payload must not reach orchestrator");
@@ -135,9 +137,10 @@ function buildValidRequestBody() {
   const validRes = createMockRes();
   await executeHandlers(routes["/plan"], validReq, validRes);
 
-  assert(validRes.statusCode === 200, "Valid payload must pass validation and return HTTP 200");
-  assert(validRes.body && validRes.body.ok === true, "Valid payload must reach handler output");
-  assert(orchestratorCallCount === 1, "Valid payload must reach orchestrator exactly once");
+  assert(validRes.statusCode === 500, "Malformed fresh orchestrator output must be blocked with HTTP 500");
+  assert(validRes.body && validRes.body.version === "ErrorResponse_v1", "Malformed fresh output must return ErrorResponse_v1");
+  assert(validRes.body && validRes.body.error && validRes.body.error.code === "RESPONSE_VALIDATION_ERROR", "Malformed fresh output must return response validation error");
+  assert(orchestratorCallCount === 1, "Valid request reaches orchestrator exactly once before boundary validation");
 
-  console.log("PASS: API request validation enforces 400 on invalid and allows valid payloads");
+  console.log("PASS: API request validation enforces ErrorResponse_v1 and blocks malformed fresh /plan output");
 })();

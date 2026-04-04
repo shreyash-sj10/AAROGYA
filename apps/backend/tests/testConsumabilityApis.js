@@ -159,7 +159,10 @@ function buildWeeklyRequest() {
   const explainRes = createMockRes();
   await executeHandlers(routes["/explain"], explainReq, explainRes);
   assert(explainRes.statusCode === 200, "Expected /explain to return 200");
-  assert(explainRes.body && typeof explainRes.body.deterministic === "string", "Expected validated explain response");
+  assert(explainRes.body && explainRes.body.version === "AssistantResponse_v1", "Expected AssistantResponse_v1 explain envelope");
+  assert(typeof explainRes.body.trace_id === "string" && explainRes.body.trace_id.length > 0, "Expected assistant top-level trace_id");
+  assert(explainRes.body && explainRes.body.trace && explainRes.body.trace.version === "Trace_v1", "Assistant response must include Trace_v1");
+  assert(explainRes.body && explainRes.body.data && typeof explainRes.body.data.deterministic === "string", "Expected validated explain response");
 
   const profileReq = {
     body: {
@@ -170,7 +173,12 @@ function buildWeeklyRequest() {
   const profileRes = createMockRes();
   await executeHandlers(routes["/profile"], profileReq, profileRes);
   assert(profileRes.statusCode === 200, "Expected /profile to return 200");
-  assert(profileRes.body && profileRes.body.version === "AIProfileOutput_v1", "Expected validated profile response");
+  assert(profileRes.body && profileRes.body.version === "AssistantResponse_v1", "Expected AssistantResponse_v1 profile envelope");
+  assert(typeof profileRes.body.trace_id === "string" && profileRes.body.trace_id.length > 0, "Expected assistant top-level trace_id");
+  assert(profileRes.body && profileRes.body.trace && profileRes.body.trace.version === "Trace_v1", "Assistant response must include Trace_v1");
+  assert(profileRes.body && profileRes.body.data && profileRes.body.data.version === "AIProfileOutput_v1", "Expected validated profile response");
 
-  console.log("PASS: repositories are non-empty adapters and /weekly-plan, /explain, /profile are externally consumable with validation");
+  console.log("PASS: repositories are consumable and trace policy is enforced for assistant endpoints");
 })();
+
+

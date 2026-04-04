@@ -64,10 +64,6 @@ function isValidCachedResponse(parsed) {
 function mapErrorToStatus(error) {
   const message = error instanceof Error ? error.message : String(error || "");
 
-  if (message.startsWith("Redis failure:")) {
-    return { status: 503, code: "REDIS_UNAVAILABLE", message };
-  }
-
   if (message.includes("validation failed")) {
     return { status: 400, code: "CONTRACT_VIOLATION", message };
   }
@@ -75,23 +71,43 @@ function mapErrorToStatus(error) {
   return { status: 500, code: "INTERNAL_ERROR", message: "Internal server error" };
 }
 
+function toSafeBodyMeta(body) {
+  return toSafeObject(body.meta);
+}
+
 function buildApiError(code, message, reqBody, details = {}) {
   const safeDetails = details && typeof details === "object" ? details : {};
   const safeBody = reqBody && typeof reqBody === "object" ? reqBody : {};
 
+  const metaRequestId = toSafeString(safeDetails.request_id || toSafeBodyMeta(safeBody).request_id, "unknown_request");
+  const metaTraceId = toSafeString(safeDetails.trace_id || toSafeBodyMeta(safeBody).trace_id, "unknown_trace");
+  const { request_id: _rid, trace_id: _tid, ...detailWithoutMeta } = safeDetails;
+
   return buildErrorResponse({
     code,
     message,
-    details: {
-      request_id: toSafeString(toSafeBodyMeta(safeBody).request_id, "unknown_request"),
-      trace_id: toSafeString(toSafeBodyMeta(safeBody).trace_id, "unknown_trace"),
-      ...safeDetails,
-    },
+    request_id: metaRequestId,
+    trace_id: metaTraceId,
+    details: detailWithoutMeta,
   });
 }
 
-function toSafeBodyMeta(body) {
-  return toSafeObject(body.meta);
+function applyCacheDegradedMeta(response, cacheError, latencyMs) {
+  const payload = clone(response);
+  payload.meta = {
+    ...toSafeObject(payload.meta),
+    latency_ms: Math.max(0, latencyMs),
+    cache_hit: false,
+    model_version: toSafeString(toSafeObject(payload.meta).model_version, "assistive_offline_v1"),
+    prompt_version: toSafeString(toSafeObject(payload.meta).prompt_version, "prompt_v1"),
+    rules_version: toSafeString(toSafeObject(payload.meta).rules_version, "rules_v1"),
+  };
+
+  if (cacheError) {
+    payload.meta.cache_error = true;
+  }
+
+  return payload;
 }
 
 function registerWeeklyRoutes(app, deps = {}) {
@@ -107,6 +123,8 @@ function registerWeeklyRoutes(app, deps = {}) {
 
   app.post("/weekly-plan", async (req, res) => {
     const start = Date.now();
+    const idempotencyKey = buildWeeklyIdempotencyKey(req.body);
+    let cacheError = false;
 
     try {
       const requestValidation = validateWeeklyDecisionRequest(req && req.body);
@@ -117,8 +135,13 @@ function registerWeeklyRoutes(app, deps = {}) {
         }));
       }
 
-      const idempotencyKey = buildWeeklyIdempotencyKey(req.body);
-      const cached = await redisClient.get(idempotencyKey);
+      let cached = null;
+      try {
+        cached = await redisClient.get(idempotencyKey);
+      } catch (_error) {
+        cacheError = true;
+        recordError("CACHE_ERROR");
+      }
 
       if (cached) {
         let parsed = null;
@@ -129,6 +152,7 @@ function registerWeeklyRoutes(app, deps = {}) {
           validCache = isValidCachedResponse(parsed);
         } catch (error) {
           validCache = false;
+          cacheError = true;
           logError({
             request_id: toSafeString(toSafeBodyMeta(req.body).request_id, "weekly_request"),
             trace_id: toSafeString(toSafeBodyMeta(req.body).trace_id, "weekly_trace"),
@@ -145,10 +169,20 @@ function registerWeeklyRoutes(app, deps = {}) {
             cache_hit: true,
             served_latency_ms: Math.max(0, Date.now() - start),
           };
+
+          if (cacheError) {
+            payload.meta.cache_error = true;
+          }
+
           return res.status(200).json(payload);
         }
 
-        await purgeCacheKey(redisClient, idempotencyKey);
+        try {
+          await purgeCacheKey(redisClient, idempotencyKey);
+        } catch (_error) {
+          cacheError = true;
+          recordError("CACHE_ERROR");
+        }
       }
 
       const internalInput = adaptRequest(req.body);
@@ -160,16 +194,10 @@ function registerWeeklyRoutes(app, deps = {}) {
         ...toSafeObject(result.trace),
         trace_id: toSafeString(toSafeObject(result.trace).trace_id, result.trace_id),
       };
-      result.meta = {
-        ...toSafeObject(result.meta),
-        latency_ms: Math.max(0, Date.now() - start),
-        cache_hit: false,
-        model_version: toSafeString(toSafeObject(result.meta).model_version, "assistive_offline_v1"),
-        prompt_version: toSafeString(toSafeObject(result.meta).prompt_version, "prompt_v1"),
-        rules_version: toSafeString(toSafeObject(result.meta).rules_version, "rules_v1"),
-      };
 
-      const traceValidation = validateTrace(result.trace);
+      const payload = applyCacheDegradedMeta(result, cacheError, Date.now() - start);
+
+      const traceValidation = validateTrace(payload.trace);
       if (!traceValidation.valid) {
         return res.status(500).json(buildApiError("TRACE_VALIDATION_ERROR", "Trace_v1 validation failed", req && req.body, {
           source: "api.weekly",
@@ -177,7 +205,7 @@ function registerWeeklyRoutes(app, deps = {}) {
         }));
       }
 
-      const responseValidation = validateWeeklyDecisionResponse(result);
+      const responseValidation = validateWeeklyDecisionResponse(payload);
       if (!responseValidation.valid) {
         return res.status(500).json(buildApiError("RESPONSE_VALIDATION_ERROR", "WeeklyDecisionResponse_v1 validation failed", req && req.body, {
           source: "api.weekly",
@@ -185,13 +213,18 @@ function registerWeeklyRoutes(app, deps = {}) {
         }));
       }
 
-      await redisClient.set(
-        idempotencyKey,
-        JSON.stringify(result),
-        Number.isFinite(IDEMPOTENCY_TTL_SECONDS) && IDEMPOTENCY_TTL_SECONDS > 0 ? IDEMPOTENCY_TTL_SECONDS : 300
-      );
+      try {
+        await redisClient.set(
+          idempotencyKey,
+          JSON.stringify(payload),
+          Number.isFinite(IDEMPOTENCY_TTL_SECONDS) && IDEMPOTENCY_TTL_SECONDS > 0 ? IDEMPOTENCY_TTL_SECONDS : 300
+        );
+      } catch (_error) {
+        payload.meta.cache_error = true;
+        recordError("CACHE_ERROR");
+      }
 
-      return res.status(200).json(result);
+      return res.status(200).json(payload);
     } catch (error) {
       const mapped = mapErrorToStatus(error);
       logError({

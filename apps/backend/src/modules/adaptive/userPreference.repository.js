@@ -53,7 +53,6 @@ function saveUserWeights(user_id, weights) {
   preferenceRepository.upsertPreference(userId, normalized).catch((err) => {
     logger.error("User preference save failed", { err });
     metrics.increment("preference_write_error");
-    throw err;
   });
 
   return clone(normalized);

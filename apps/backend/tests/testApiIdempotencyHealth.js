@@ -191,12 +191,15 @@ function canonicalize(body) {
   assert(healthRes.statusCode === 200, "healthy dependencies should return health 200");
   assert(healthRes.body && healthRes.body.status === "ok", "health payload should report ok");
   assert(typeof healthRes.body.request_id === "string" && typeof healthRes.body.trace_id === "string", "health must include top-level identity");
+  assert(healthRes.body && healthRes.body.trace && healthRes.body.trace.version === "Trace_v1", "health must include Trace_v1");
 
   const metricsRes = createMockRes();
   await executeHandlers(routes["/metrics"], { body: {} }, metricsRes);
   assert(metricsRes.statusCode === 200, "metrics endpoint should return 200");
   assert(metricsRes.body && metricsRes.body.version === "MetricsResponse_v1", "metrics must return normalized contract");
   assert(typeof metricsRes.body.request_id === "string" && typeof metricsRes.body.trace_id === "string", "metrics must include top-level identity");
+  assert(metricsRes.body && metricsRes.body.trace && metricsRes.body.trace.version === "Trace_v1", "metrics must include Trace_v1");
 
-  console.log("PASS: idempotency caching, /health, and /metrics endpoint checks work");
+  console.log("PASS: idempotency caching works and ops trace policy is enforced");
 })();
+

@@ -14,3 +14,4 @@ export function schemaGuard<T>(schema: z.ZodType<T>, payload: unknown): { succes
     errors: parsed.error.issues.map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`),
   };
 }
+
