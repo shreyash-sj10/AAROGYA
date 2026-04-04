@@ -13,6 +13,10 @@ export function validateProfileStep(context: UserContext): boolean {
     && context.profile.age !== null
     && context.profile.age > 0
     && context.profile.gender !== null
+    && Number.isFinite(context.profile.height)
+    && context.profile.height > 0
+    && Number.isFinite(context.profile.weight)
+    && context.profile.weight > 0
   );
 }
 
@@ -38,18 +42,32 @@ export function ProfileStep({ showErrors = false }: ProfileStepProps) {
     const showName = showErrors || touched.name;
     const showAge = showErrors || touched.age;
     const showGender = showErrors || touched.gender;
+    const showHeight = showErrors || touched.height;
+    const showWeight = showErrors || touched.weight;
 
     return {
       name: showName && profile.name.trim() === "" ? "Please enter your full name" : null,
       age: showAge && (profile.age === null || profile.age <= 0) ? "Please enter your age" : null,
       gender: showGender && !profile.gender ? "Please select gender" : null,
+      height: showHeight && (!Number.isFinite(profile.height) || profile.height <= 0) ? "Please enter your height" : null,
+      weight: showWeight && (!Number.isFinite(profile.weight) || profile.weight <= 0) ? "Please enter your weight" : null,
     };
   }, [profile, showErrors, touched]);
 
-  const onNumberChange = (field: "age") => (event: ChangeEvent<HTMLInputElement>) => {
+  const onNumberChange = (field: "age" | "height" | "weight") => (event: ChangeEvent<HTMLInputElement>) => {
+    const parsed = toNumberOrNull(event.target.value);
+
+    if (field === "age") {
+      setProfile({
+        ...profile,
+        age: parsed,
+      });
+      return;
+    }
+
     setProfile({
       ...profile,
-      [field]: toNumberOrNull(event.target.value),
+      [field]: parsed ?? 0,
     });
   };
 
@@ -90,6 +108,42 @@ export function ProfileStep({ showErrors = false }: ProfileStepProps) {
           onChange={onNumberChange("age")}
         />
         {fieldErrors.age && <p className="mt-1 text-sm text-red-600">{fieldErrors.age}</p>}
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label htmlFor="onboarding-profile-height" className="block text-sm font-medium text-slate-700">
+            Height (cm)
+          </label>
+          <input
+            id="onboarding-profile-height"
+            className={`${inputClass} ${fieldErrors.height ? errorRing : ""}`}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            value={profile.height > 0 ? profile.height : ""}
+            onBlur={markTouched("height")}
+            onChange={onNumberChange("height")}
+          />
+          {fieldErrors.height && <p className="mt-1 text-sm text-red-600">{fieldErrors.height}</p>}
+        </div>
+
+        <div>
+          <label htmlFor="onboarding-profile-weight" className="block text-sm font-medium text-slate-700">
+            Weight (kg)
+          </label>
+          <input
+            id="onboarding-profile-weight"
+            className={`${inputClass} ${fieldErrors.weight ? errorRing : ""}`}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            value={profile.weight > 0 ? profile.weight : ""}
+            onBlur={markTouched("weight")}
+            onChange={onNumberChange("weight")}
+          />
+          {fieldErrors.weight && <p className="mt-1 text-sm text-red-600">{fieldErrors.weight}</p>}
+        </div>
       </div>
 
       <div>
