@@ -1,9 +1,7 @@
+const { toSafeString } = require("../../utils/safeUtils");
+
 function nowIso() {
   return new Date().toISOString();
-}
-
-function toSafeString(value, fallback = "") {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
 function emit(level, payload) {

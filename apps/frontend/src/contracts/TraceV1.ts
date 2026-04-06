@@ -4,7 +4,18 @@ export type TraceV1 = {
   compatibility: "backward";
   trace_id: string;
   timestamp: number;
+  refinement_loop?: {
+    round: number;
+    triggered_questions: string[];
+    reason: string;
+    impact_on_confidence: number;
+  };
   stages: {
+    interpretation_layer: {
+      ml_used: boolean;
+      ml_confidence: number;
+      ml_contribution_weight: number;
+    };
     candidate_generator: {
       input_count: number;
       output_count: number;
@@ -18,6 +29,9 @@ export type TraceV1 = {
         action: "reject" | "penalize";
         reason: string;
       }>;
+      p0_rules_checked: number;
+      p0_violations: number;
+      p0_violated_rule_ids: string[];
     };
     scoring_engine: {
       input_count: number;
@@ -26,6 +40,8 @@ export type TraceV1 = {
     diversity_engine: {
       input_count: number;
       output_count: number;
+      historical_matches_count?: number;
+      diversity_penalty_applied?: number;
     };
     optimizer: {
       input_count: number;
@@ -36,6 +52,15 @@ export type TraceV1 = {
     reliability_engine: {
       input_count: number;
       output_count: number;
+      relaxation_level?: number;
+      relaxed_priorities?: string[];
+      confidence_eval?: {
+        relaxation_impact: number;
+        pool_quality: number;
+        score_confidence: number;
+        penalty_impact: number;
+        diversity_impact: number;
+      };
     };
   };
 };

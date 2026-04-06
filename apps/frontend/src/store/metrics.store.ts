@@ -19,8 +19,21 @@ function buildClientError(err: unknown): ErrorResponseV1 {
       trace_id: traceId,
       timestamp: now,
       stages: {
+        interpretation_layer: {
+          ml_used: false,
+          ml_confidence: 0,
+          ml_contribution_weight: 0,
+        },
         candidate_generator: { input_count: 1, output_count: 0 },
-        constraint_engine: { input_count: 1, output_count: 0, rejected: 1, rules: [] },
+        constraint_engine: {
+          input_count: 1,
+          output_count: 0,
+          rejected: 1,
+          rules: [],
+          p0_rules_checked: 0,
+          p0_violations: 0,
+          p0_violated_rule_ids: [],
+        },
         scoring_engine: { input_count: 0, output_count: 0 },
         diversity_engine: { input_count: 0, output_count: 0 },
         optimizer: { input_count: 0, output_count: 0, combinations_evaluated: 0, selected_score: 0 },
