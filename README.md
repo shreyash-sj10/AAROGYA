@@ -1,10 +1,10 @@
-# AYUDIET
+# AAROGYA
 
 Deterministic, contract-first meal recommendation engine that combines Ayurveda-informed constraints with modern nutrition scoring.
 
 ## What This Repository Contains
 
-AYUDIET currently implements a food-level deterministic pipeline and is transitioning to a recipe-level architecture (`RecipeAggregate_v1`) under the 3.1 foundation lock.
+AAROGYA currently implements a food-level deterministic pipeline and is transitioning to a recipe-level architecture (`RecipeAggregate_v1`) under the 3.1 foundation lock.
 
 Current runtime pipeline:
 
@@ -33,7 +33,7 @@ See:
 ## Repository Structure
 
 ```text
-AYUDIET_FINAL/
+AAROGYA/
   db/
     schema.sql
   docs/
