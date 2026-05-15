@@ -26,12 +26,9 @@ flowchart LR
     B --> F[FastAPI AI Assistive Service]
 ```
 
-<<<<<<< Updated upstream
-=======
 ### Architecture Diagram
 
 ![AAROGYA System Architecture](docs/assets/diagrams/aarogya-system-architecture.png)
->>>>>>> Stashed changes
 
 ### Key Design Decisions
 
