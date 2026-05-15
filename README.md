@@ -86,9 +86,6 @@ The backend can operate with DB-backed data or fallback local catalogs (visible 
 
 ---
 
-## System Flow
-<img width="1224" height="820" alt="image" src="https://github.com/user-attachments/assets/c2a5ae59-1da0-4d15-abd0-4400be01246f" />
-
 ### End-to-End Flow Diagram
 
 ![AAROGYA System Flow](docs/assets/diagrams/aarogya-system-flow.png)
