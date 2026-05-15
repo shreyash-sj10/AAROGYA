@@ -30,35 +30,21 @@ See:
 - [Contracts](docs/CONTRACTS.md)
 - [Roadmap](docs/ROADMAP.md)
 
-## Repository Structure
+## Repository structure (monorepo)
 
 ```text
 AAROGYA/
-  db/
-    schema.sql
-  docs/
-    ARCHITECTURE.md
-    CONTRACTS.md
-    ROADMAP.md
-  src/
-    config/
-    modules/
-      candidate/
-      diversity/
-      explanation/
-      food/
-      optimizer/
-      reliability/
-      rules/
-      scoring/
-      templates/
-      userState/
-    pipeline/
-    services/
-    utils/
-  test*.js
-  package.json
+  apps/
+    backend/          # Express API, Prisma, deterministic pipeline (canonical)
+    frontend/         # Vite + React client
+    ai-service/       # Optional FastAPI assistive layer
+  docs/               # PRD, architecture, execution plan, test inventory
+  infrastructure/     # SQL migrations, load scripts
+  docker-compose.yml  # Local Postgres + Redis
+  package.json        # npm workspaces + verify / dev scripts
 ```
+
+Legacy **`db/schema.sql`** may still exist for reference; **Prisma** and **`infrastructure/db/`** are the persistence sources of truth for new work.
 
 ## Quick Start
 
@@ -70,12 +56,31 @@ AAROGYA/
 ### Install
 
 ```bash
-npm install
+npm ci
 ```
 
-### Run smoke tests
+### Monorepo dev (backend + frontend)
+
+From the repository root:
 
 ```bash
+npm run dev
+```
+
+Runs the API (default [http://localhost:5000](http://localhost:5000)) and Vite ([http://localhost:5173](http://localhost:5173)) together. Optional Postgres/Redis: `docker compose up -d`. Full steps and env vars: [docs/RUNBOOK_LOCAL.md](docs/RUNBOOK_LOCAL.md).
+
+### Match CI locally
+
+```bash
+npm run verify
+```
+
+### Legacy per-package scripts (optional)
+
+From `apps/backend` only (not defined at repo root):
+
+```bash
+cd apps/backend
 npm run test:food
 npm run test:pipeline
 npm run test:system
@@ -87,17 +92,17 @@ npm run test:system
 npm run test:all
 ```
 
-## Key Modules
+## Key modules (backend)
 
-- `src/modules/food`: food schema validation + sample loading (AJV)
-- `src/modules/rules`: deterministic rule evaluation and filtering
-- `src/modules/candidate`: candidate generation + prefilters
-- `src/modules/scoring`: nutrition/dosha/digestibility/familiarity scoring
-- `src/modules/diversity`: repetition penalty handling
-- `src/modules/optimizer`: combinational meal optimization
-- `src/modules/reliability`: constraint relaxation + confidence computation
-- `src/modules/explanation`: user-facing explanation generation
-- `src/pipeline`: orchestrated end-to-end flow
+- `apps/backend/src/modules/food`: food schema validation + sample loading (AJV)
+- `apps/backend/src/modules/rules`: deterministic rule evaluation and filtering
+- `apps/backend/src/modules/candidate`: candidate generation + prefilters
+- `apps/backend/src/modules/scoring`: nutrition/dosha/digestibility/familiarity scoring
+- `apps/backend/src/modules/diversity`: repetition penalty handling
+- `apps/backend/src/modules/optimizer`: combinational meal optimization
+- `apps/backend/src/modules/reliability`: constraint relaxation + confidence computation
+- `apps/backend/src/modules/explanation`: user-facing explanation generation
+- `apps/backend/src/core/pipeline`: orchestrated end-to-end flow
 
 ## Contracts and Governance
 
@@ -119,11 +124,11 @@ Every contract includes:
 
 Breaking changes require `_v2`.
 
+See [docs/MASTER_EXECUTION_PLAN.md](docs/MASTER_EXECUTION_PLAN.md) and [docs/TESTS_INVENTORY.md](docs/TESTS_INVENTORY.md).
+
 ## Database
 
-Current SQL schema is in [db/schema.sql](db/schema.sql).
-
-3.1 introduces recipe-first tables (`recipes`, `recipe_ingredients`, `recipe_aggregates`) with precomputed aggregates for deterministic and performant runtime scoring.
+Primary SQL evolution: **`apps/backend/prisma/`** and **`infrastructure/db/`**. Legacy **`db/schema.sql`** may exist for reference only.
 
 ## Notes for Contributors
 
