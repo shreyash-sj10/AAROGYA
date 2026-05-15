@@ -1,8 +1,6 @@
-const MINIMUM_SAFE_CALORIES = 300;
+const { toSafeNumber } = require("../utils/safeUtils");
 
-function toSafeNumber(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+const MINIMUM_SAFE_CALORIES = 300;
 
 function toNonNegativeNumber(value) {
   return Math.max(0, toSafeNumber(value, 0));

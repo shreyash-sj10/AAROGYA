@@ -4,6 +4,7 @@ import { ProtectedRoute } from "@/app/routes/ProtectedRoute";
 import { PublicRoute } from "@/app/routes/PublicRoute";
 import { SystemRootPage } from "@/system/SystemRootPage";
 import { SystemMetricsPage } from "@/system/SystemMetricsPage";
+import { SystemReliabilityPage } from "@/system/SystemReliabilityPage";
 import { SystemLogsPage } from "@/system/SystemLogsPage";
 import LoginPage from "@/app/login/page";
 import SignupPage from "@/app/signup/page";
@@ -11,6 +12,7 @@ import OnboardingPage from "@/app/onboarding/page";
 import DashboardPage from "@/app/dashboard/page";
 import PlannerPage from "@/app/planner/page";
 import TracePage from "@/app/trace/page";
+import KnowledgePage from "@/app/knowledge/page";
 
 export const router = createBrowserRouter([
   {
@@ -67,6 +69,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "/app/knowledge",
+        element: (
+          <ProtectedRoute>
+            <KnowledgePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "/app/trace",
         element: (
           <ProtectedRoute>
@@ -91,6 +101,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "/app/system/reliability",
+        element: (
+          <ProtectedRoute>
+            <SystemReliabilityPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "/app/system/logs",
         element: (
           <ProtectedRoute>
@@ -111,6 +129,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <SystemMetricsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/system/reliability",
+        element: (
+          <ProtectedRoute>
+            <SystemReliabilityPage />
           </ProtectedRoute>
         ),
       },

@@ -1,10 +1,4 @@
-function toSafeObject(value) {
-  return value && typeof value === "object" ? value : {};
-}
-
-function toSafeNumber(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+const { toSafeObject, toSafeNumber } = require("../utils/safeUtils");
 
 function getDoshaAdjustment(state) {
   const safeState = toSafeObject(state);

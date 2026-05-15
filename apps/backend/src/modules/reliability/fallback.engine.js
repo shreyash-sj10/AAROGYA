@@ -2,15 +2,8 @@ const { getBestTemplate, extractCategories } = require("../../templates/mealTemp
 const { generateCandidates, computeScoreLite } = require("../candidate/candidateGenerator");
 const { filterFoods } = require("../../rules/engine/constraintEngine");
 const { ContractViolationError } = require("../../contracts/errors/ContractViolationError");
-const { sampleFoods } = require("../food/food.samples");
-
-function toSafeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function toSafeObject(value) {
-  return value && typeof value === "object" ? value : {};
-}
+const { getFoods } = require("../../repositories/food.repository");
+const { toSafeObject, toSafeArray } = require("../../utils/safeUtils");
 
 function normalizePriority(value) {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
@@ -129,7 +122,7 @@ function pickPoolFoods(contextFoods) {
   if (primary.length > 0) {
     return primary;
   }
-  return toSafeArray(sampleFoods).filter((food) => food && typeof food === "object");
+  return toSafeArray(getFoods()).filter((food) => food && typeof food === "object");
 }
 
 function ensureEmergencyCandidate(template, foods) {

@@ -36,13 +36,15 @@ export type DecisionResponseV1 = {
   trace: TraceV1;
   explanation: {
     deterministic: string;
-    ai_explanation: string;
+    ai_explanation?: string;
     citations: Array<{
       text_id: string;
       source: string;
       chapter: string;
     }>;
   };
+  insights: string[];
+  warnings: string[];
   meta: {
     latency_ms: number;
     cache_hit: boolean;

@@ -1,40 +1,81 @@
-const { toSafeArray, toSafeNumber } = require("../../utils/normalizeInput");
+const { toSafeArray, toSafeNumber, toSafeObject } = require("../../utils/safeUtils");
 const { ContractViolationError } = require("../../contracts/errors/ContractViolationError");
 const { filterFoods } = require("../../rules/engine/constraintEngine");
-const { generateSafeFallback } = require("./fallback.engine");
+const { generateCandidates } = require("../candidate/candidateGenerator");
+const { applyConstraints } = require("../constraint/constraintEngine");
+const { scoreCandidates } = require("../scoring/scoringEngine");
+const { applyDiversity } = require("../diversity/diversityEngine");
+const { optimizeMeal } = require("../optimizer/optimizer");
+const { getFallbackMeal } = require("./fallback.engine");
 
-function toSafeObject(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
+const RELAXATION_LEVELS = [
+  { level: 0, excludedPriorities: [], label: "Strict" },
+  { level: 1, excludedPriorities: ["P3"], label: "Light Relaxation" },
+  { level: 2, excludedPriorities: ["P2", "P3"], label: "Heavy Relaxation" },
+  { level: 3, excludedPriorities: ["P1", "P2", "P3"], label: "P0 Only" }
+];
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, toSafeNumber(value, 0)));
 }
 
 function toMealPlanFromBreakdown(mealResult) {
-  const items = toSafeArray(toSafeObject(toSafeObject(mealResult).breakdown).items);
+  const safeBreakdown = toSafeObject(toSafeObject(mealResult).breakdown);
+  const fixedItems = toSafeArray(toSafeObject(safeBreakdown.meta).fixedItems);
+  const dynamicItems = toSafeArray(safeBreakdown.items);
+  const items = [
+    ...fixedItems.map((fixedItem) => ({ __fixed: true, value: fixedItem })),
+    ...dynamicItems,
+  ];
+
+  const seen = new Set();
+
   return items
     .map((item) => {
-      const safe = toSafeObject(item);
+      const isFixed = Boolean(toSafeObject(item).__fixed);
+      const safe = isFixed ? toSafeObject(toSafeObject(item).value) : toSafeObject(item);
+      const fixedValue = isFixed ? toSafeObject(item).value : null;
+
+      const fixedName = typeof fixedValue === "string" && fixedValue.trim() ? fixedValue.trim() : "";
       const recipeId = typeof safe.recipe_id === "string" && safe.recipe_id.trim()
         ? safe.recipe_id.trim()
-        : (typeof safe.id === "string" && safe.id.trim() ? safe.id.trim() : "");
-      const name = typeof safe.name === "string" && safe.name.trim() ? safe.name.trim() : recipeId;
+        : (typeof safe.id === "string" && safe.id.trim()
+          ? safe.id.trim()
+          : (fixedName || ""));
+      const name = typeof safe.name === "string" && safe.name.trim()
+        ? safe.name.trim()
+        : (fixedName || recipeId);
+
       if (!recipeId || !name) {
         return null;
       }
+
+      const dedupeKey = `${recipeId}`.toLowerCase();
+      if (seen.has(dedupeKey)) {
+        return null;
+      }
+      seen.add(dedupeKey);
+
+      const safeQuantity = toSafeObject(safe.quantity);
+      const safeNutrition = toSafeObject(safe.nutrition);
+
       return {
         recipe_id: recipeId,
         name,
         quantity: {
-          value: 100,
-          unit: "grams",
+          value: Math.max(0, toSafeNumber(safeQuantity.value, 100)),
+          unit: typeof safeQuantity.unit === "string" && safeQuantity.unit.trim() ? safeQuantity.unit.trim() : "grams",
+        },
+        nutrition: {
+          calories: Math.max(0, toSafeNumber(safeNutrition.calories, 0)),
+          protein: Math.max(0, toSafeNumber(safeNutrition.protein, 0)),
+          carbs: Math.max(0, toSafeNumber(safeNutrition.carbs, 0)),
+          fat: Math.max(0, toSafeNumber(safeNutrition.fat, 0)),
         },
       };
     })
     .filter(Boolean);
 }
-
 function computeNutritionSummary(mealResult) {
   const items = toSafeArray(toSafeObject(toSafeObject(mealResult).breakdown).items);
 
@@ -101,7 +142,54 @@ function assertP0Compliance(result, userState, rules) {
   }
 }
 
-function buildPassResult(mealResult, stageStats) {
+function computeDynamicConfidence(mealResult, optimizerStats, relaxationLevel) {
+  const safeStats = toSafeObject(optimizerStats);
+  const safeBreakdown = toSafeObject(toSafeObject(mealResult).breakdown);
+  const safeMeta = toSafeObject(safeBreakdown.meta);
+
+  const baseScore = clamp01(toSafeNumber(toSafeObject(mealResult).score, 0));
+  const topScore = clamp01(toSafeNumber(safeStats.selectedScore, baseScore));
+  const secondBestScore = clamp01(toSafeNumber(safeStats.secondBestScore, topScore));
+  const poolSize = Math.max(0, toSafeNumber(safeStats.inputCount, 0));
+
+  const relaxationImpacts = { 0: 1.0, 1: 0.8, 2: 0.6, 3: 0.4, 4: 0.1 };
+  const relaxation_impact = relaxationImpacts[relaxationLevel] || 0.1;
+
+  let pool_quality = 1.0;
+  if (poolSize <= 3) pool_quality = 0.5;
+  else if (poolSize <= 10) pool_quality = 0.8;
+
+  const scoreMargin = Math.max(0, topScore - secondBestScore);
+  let score_confidence = 1.0;
+  if (poolSize <= 1) {
+    score_confidence = 0.5;
+  } else if (scoreMargin <= 0.01) {
+    score_confidence = 0.6;
+  } else if (scoreMargin <= 0.05) {
+    score_confidence = 0.8;
+  }
+
+  const totalPenalty = clamp01(toSafeNumber(safeMeta.totalPenalty, 0));
+  const penalty_impact = Math.max(0, 1.0 - (totalPenalty * 2));
+
+  const divPenalty = clamp01(toSafeNumber(safeMeta.totalDiversityPenalty, 0));
+  const diversity_impact = Math.max(0, 1.0 - (divPenalty * 2));
+
+  const rawConfidence = baseScore * relaxation_impact * pool_quality * score_confidence * penalty_impact * diversity_impact;
+
+  return {
+    value: clamp01(Number(rawConfidence.toFixed(6))),
+    components: {
+      relaxation_impact,
+      pool_quality,
+      score_confidence,
+      penalty_impact,
+      diversity_impact
+    }
+  };
+}
+
+function buildPassResult(mealResult, stageStats, confData) {
   const mealPlan = toMealPlanFromBreakdown(mealResult);
 
   if (mealPlan.length === 0) {
@@ -117,13 +205,14 @@ function buildPassResult(mealResult, stageStats) {
     nutrition_summary: computeNutritionSummary(mealResult),
     traceExtension: {
       constraint_rules: buildConstraintRulesTrace(mealResult),
+      confidence_eval: confData ? confData.components : undefined,
     },
     confidence: {
-      value: clamp01(toSafeNumber(toSafeObject(mealResult).score, 0)),
+      value: confData ? confData.value : clamp01(toSafeNumber(toSafeObject(mealResult).score, 0)),
       components: {
-        penalty_impact: 1,
-        diversity_impact: 1,
-        relaxation_impact: 1,
+        penalty_impact: confData ? confData.components.penalty_impact : 1,
+        diversity_impact: confData ? confData.components.diversity_impact : 1,
+        relaxation_impact: confData ? confData.components.relaxation_impact : 1,
       },
     },
     meta: {
@@ -147,49 +236,103 @@ function buildPassResult(mealResult, stageStats) {
   return result;
 }
 
-function buildSafeFallbackResult(safeFallback, inputCount) {
-  const fallbackItems = toSafeArray(toSafeObject(toSafeObject(safeFallback).breakdown).items);
+function filterActiveRules(rules, level) {
+  const safeRules = toSafeArray(rules);
+  const def = RELAXATION_LEVELS.find((l) => l.level === level) || RELAXATION_LEVELS[0];
+  const excluded = new Set(def.excludedPriorities);
+  return safeRules.filter((rule) => {
+    const priority = typeof rule === "object" && rule ? String(rule.priority).trim().toUpperCase() : "";
+    return !excluded.has(priority);
+  });
+}
 
-  const result = {
-    mealPlan: toSafeArray(toSafeObject(safeFallback).mealPlan),
-    score: clamp01(toSafeNumber(toSafeObject(safeFallback).score, 0)),
+function relaxedPrioritiesForLevel(level) {
+  const def = RELAXATION_LEVELS.find((l) => l.level === level) || RELAXATION_LEVELS[0];
+  return [...def.excludedPriorities];
+}
+
+function runPipelinePass(input, activeRules) {
+  const safeInput = toSafeObject(input);
+  const candidates = generateCandidates(safeInput.template, safeInput.foods, safeInput.userState, activeRules);
+  const constrained = applyConstraints(safeInput.template, candidates, safeInput.userState, activeRules);
+  const scored = scoreCandidates(constrained, safeInput.userState, safeInput.template);
+  const diversified = applyDiversity(scored, safeInput.userHistory);
+  const mealResult = optimizeMeal(safeInput.template, diversified);
+  return mealResult;
+}
+
+function buildLastResortFallbackMealResult(input) {
+  const safeInput = toSafeObject(input);
+  const p0Rules = extractP0Rules(safeInput.rules);
+  const candidateFoods = toSafeArray(safeInput.foods)
+    .map((food) => ({
+      ...toSafeObject(food),
+      evaluation: {
+        isValid: true,
+        totalPenalty: 0,
+        triggeredRules: [],
+      },
+      quantity: {
+        value: 100,
+        unit: "grams",
+      },
+    }))
+    .filter((food) => {
+      const recipeId = typeof food.recipe_id === "string" && food.recipe_id.trim()
+        ? food.recipe_id.trim()
+        : (typeof food.id === "string" && food.id.trim() ? food.id.trim() : "");
+      const name = typeof food.name === "string" && food.name.trim() ? food.name.trim() : "";
+      return Boolean(recipeId || name);
+    });
+
+  const validation = filterFoods(candidateFoods, toSafeObject(safeInput.userState), p0Rules);
+  const selected = toSafeObject(toSafeArray(validation.validFoods)[0] || candidateFoods[0]);
+
+  const recipeId = typeof selected.recipe_id === "string" && selected.recipe_id.trim()
+    ? selected.recipe_id.trim()
+    : (typeof selected.id === "string" && selected.id.trim() ? selected.id.trim() : "emergency-safe-001");
+  const name = typeof selected.name === "string" && selected.name.trim() ? selected.name.trim() : recipeId;
+
+  return {
+    score: 0,
     breakdown: {
-      ...toSafeObject(toSafeObject(safeFallback).breakdown),
-      items: fallbackItems.map((item) => ({ ...toSafeObject(item) })),
-    },
-    nutrition_summary: computeNutritionSummary({ breakdown: { items: fallbackItems } }),
-    traceExtension: {
-      constraint_rules: toSafeArray(toSafeObject(toSafeObject(safeFallback).traceExtension).constraint_rules),
-    },
-    confidence: {
-      value: 0.3,
-      components: {
-        penalty_impact: 1,
-        diversity_impact: 1,
-        relaxation_impact: 0,
+      items: [
+        {
+          ...selected,
+          recipe_id: recipeId,
+          name,
+          quantity: {
+            value: Math.max(0, toSafeNumber(toSafeObject(selected.quantity).value, 100)),
+            unit: typeof toSafeObject(selected.quantity).unit === "string" && toSafeObject(selected.quantity).unit.trim()
+              ? toSafeObject(selected.quantity).unit.trim()
+              : "grams",
+          },
+          nutrition: {
+            calories: Math.max(0, toSafeNumber(toSafeObject(selected.nutrition).calories, 0)),
+            protein: Math.max(0, toSafeNumber(toSafeObject(selected.nutrition).protein, 0)),
+            carbs: Math.max(0, toSafeNumber(toSafeObject(selected.nutrition).carbs, 0)),
+            fat: Math.max(0, toSafeNumber(toSafeObject(selected.nutrition).fat, 0)),
+          },
+          evaluation: {
+            isValid: true,
+            totalPenalty: 0,
+            triggeredRules: [],
+          },
+        },
+      ],
+      meta: {
+        totalPenalty: 0,
+        totalDiversityPenalty: 0,
+        fallback: true,
+        fallback_safe: true,
       },
     },
     meta: {
       fallback_used: true,
-      relaxation_level: Math.max(1, Math.trunc(toSafeNumber(toSafeObject(toSafeObject(safeFallback).meta).relaxation_level, 3))),
-      fallback_reason: typeof toSafeObject(toSafeObject(safeFallback).meta).fallback_reason === "string"
-        ? toSafeObject(toSafeObject(safeFallback).meta).fallback_reason
-        : "SAFE_P0_ONLY",
+      relaxation_level: 3,
+      fallback_reason: "EMERGENCY_SAFE_P0",
     },
   };
-
-  Object.defineProperty(result, "__stageStats", {
-    value: {
-      inputCount: Math.max(0, Math.trunc(toSafeNumber(inputCount, 0))),
-      outputCount: 1,
-      rejectedCount: 0,
-      reason: "reliability_safe_fallback",
-    },
-    enumerable: false,
-    writable: false,
-  });
-
-  return result;
 }
 
 function computeReliabilityResult(input) {
@@ -208,19 +351,70 @@ function computeReliabilityResult(input) {
   );
 
   if (mealPlan.length > 0) {
-    const passResult = buildPassResult(mealResult, { inputCount: reliabilityInputCount });
+    const confData = computeDynamicConfidence(mealResult, safeInput.optimizerStats, 0);
+    const passResult = buildPassResult(mealResult, { inputCount: reliabilityInputCount }, confData);
+    passResult.meta.relaxation_level = 0;
+    passResult.meta.relaxed_priorities = [];
     assertP0Compliance(passResult, safeInput.userState, safeInput.rules);
     return passResult;
   }
 
-  const safeFallback = generateSafeFallback({
-    mealType: safeInput.mealType,
-    foods: toSafeArray(safeInput.foods),
-    userState: toSafeObject(safeInput.userState),
-    rules: toSafeArray(safeInput.rules),
-  });
+  for (const level of [1, 2, 3]) {
+    const activeRules = filterActiveRules(safeInput.rules, level);
+    const passResultCandidate = runPipelinePass({
+      template: safeInput.template,
+      foods: safeInput.foods,
+      userState: safeInput.userState,
+      userHistory: safeInput.userHistory
+    }, activeRules);
+    
+    const candidatePlan = toMealPlanFromBreakdown(passResultCandidate);
 
-  const fallbackResult = buildSafeFallbackResult(safeFallback, reliabilityInputCount);
+    if (candidatePlan.length > 0) {
+      const confData = computeDynamicConfidence(passResultCandidate, passResultCandidate.__stageStats, level);
+      const passResult = buildPassResult(passResultCandidate, { inputCount: reliabilityInputCount }, confData);
+      passResult.meta.relaxation_level = level;
+      passResult.meta.relaxed_priorities = relaxedPrioritiesForLevel(level);
+      
+      assertP0Compliance(passResult, safeInput.userState, safeInput.rules);
+      return passResult;
+    }
+  }
+
+  let fallbackCandidate;
+  try {
+    fallbackCandidate = getFallbackMeal({
+      mealType: safeInput.mealType,
+      foods: safeInput.foods,
+      userState: safeInput.userState,
+      rules: safeInput.rules,
+      userHistory: safeInput.userHistory,
+    });
+  } catch (fallbackError) {
+    fallbackCandidate = buildLastResortFallbackMealResult(safeInput);
+  }
+
+  const fallbackMealResult = {
+    score: Math.max(0, toSafeNumber(toSafeObject(fallbackCandidate).score, 0)),
+    breakdown: toSafeObject(toSafeObject(fallbackCandidate).breakdown),
+  };
+  const fallbackLevel = Math.max(0, Math.trunc(toSafeNumber(toSafeObject(toSafeObject(fallbackCandidate).meta).relaxation_level, 3)));
+  const fallbackReason = typeof toSafeObject(toSafeObject(fallbackCandidate).meta).fallback_reason === "string"
+    ? toSafeObject(toSafeObject(fallbackCandidate).meta).fallback_reason
+    : "SAFE_FALLBACK";
+
+  const fallbackConfidence = computeDynamicConfidence(
+    fallbackMealResult,
+    { inputCount: reliabilityInputCount, selectedScore: fallbackMealResult.score, secondBestScore: 0 },
+    fallbackLevel
+  );
+
+  const fallbackResult = buildPassResult(fallbackMealResult, { inputCount: reliabilityInputCount }, fallbackConfidence);
+  fallbackResult.meta.fallback_used = true;
+  fallbackResult.meta.relaxation_level = fallbackLevel;
+  fallbackResult.meta.relaxed_priorities = relaxedPrioritiesForLevel(fallbackLevel);
+  fallbackResult.meta.fallback_reason = fallbackReason;
+
   assertP0Compliance(fallbackResult, safeInput.userState, safeInput.rules);
   return fallbackResult;
 }
@@ -296,24 +490,15 @@ function isLowQualityMeal(result) {
   return toSafeArray(safe.mealPlan).length === 0 || toSafeNumber(safe.score, 0) < 0.3;
 }
 
-function relaxConstraints(rules, level) {
-  const safeRules = toSafeArray(rules);
-  if (level <= 0) {
-    return safeRules.slice();
-  }
-  if (level === 1) {
-    return safeRules.filter((rule) => toSafeObject(rule).priority !== "P3");
-  }
-  return safeRules.filter((rule) => {
-    const priority = toSafeObject(rule).priority;
-    return priority !== "P2" && priority !== "P3";
-  });
-}
-
 module.exports = {
   applyReliability,
   computeConfidence,
   isLowQualityMeal,
-  relaxConstraints,
+  relaxConstraints: filterActiveRules,
 };
+
+
+
+
+
 

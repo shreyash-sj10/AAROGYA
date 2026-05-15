@@ -1,4 +1,3 @@
-const { getAIProfile } = require("../../services/ml/mlClient");
 const { validateAIProfile } = require("../../contracts/validators/validateAIProfile");
 const { applyAIGate } = require("./ai.gate");
 const { parseUserInputDeterministic } = require("../userState/symptomInterpreter");
@@ -22,10 +21,6 @@ const KNOWN_RISK_FLAGS = new Set([
 
 function toSafeArray(value) {
   return Array.isArray(value) ? value : [];
-}
-
-function toSafeString(value, fallback) {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
 function toSafeNumber(value, fallback) {
@@ -62,21 +57,9 @@ function normalizeDosha(value) {
   };
 }
 
-function sanitizeAIProfile(raw) {
-  const safeRaw = raw && typeof raw === "object" ? raw : {};
-
-  return {
-    version: "AIProfileOutput_v1",
-    schema_version: 1,
-    compatibility: "backward",
-    risk_flags: toRiskFlagIds(safeRaw.risk_flags),
-    dosha_estimate: normalizeDosha(safeRaw.dosha_estimate),
-    confidence: Math.max(0, Math.min(1, toSafeNumber(safeRaw.confidence, 0))),
-  };
-}
-
 function buildFallbackProfile(input) {
-  const parsed = parseUserInputDeterministic(input);
+  const safeInput = input && typeof input === "object" ? input : {};
+  const parsed = parseUserInputDeterministic(String(safeInput.userInput || safeInput.text || safeInput.input || ""));
 
   return {
     version: "AIProfileOutput_v1",
@@ -89,12 +72,12 @@ function buildFallbackProfile(input) {
 }
 
 function resolveProfileFromInputSync({ userInput, aiOutput, threshold } = {}) {
-  const fallback = buildFallbackProfile(toSafeString(userInput, ""));
   if (!FEATURE_FLAGS.useAIProfiling) {
-    return fallback;
+    throw new Error("AI profiling is disabled");
   }
-  const sanitized = sanitizeAIProfile(aiOutput);
-  const validation = validateAIProfile(sanitized);
+
+  const fallback = buildFallbackProfile({ userInput, aiOutput });
+  const validation = validateAIProfile(fallback);
 
   logLLMValidation({
     endpoint: "ai/profile",
@@ -105,14 +88,14 @@ function resolveProfileFromInputSync({ userInput, aiOutput, threshold } = {}) {
 
   if (!validation.valid) {
     logLLMFallback({ endpoint: "ai/profile", request_id: "ai_profile_sync", reason: "schema_validation_failed" });
-    return fallback;
+    throw new Error("AI profile schema validation failed");
   }
 
-  const gated = applyAIGate(sanitized, threshold);
+  const gated = applyAIGate(fallback, typeof threshold === "number" ? threshold : AI_CONFIDENCE_THRESHOLD);
 
   if (!gated) {
     logLLMFallback({ endpoint: "ai/profile", request_id: "ai_profile_sync", reason: "confidence_below_threshold" });
-    return fallback;
+    throw new Error("AI profile confidence below threshold");
   }
 
   return gated;
@@ -120,52 +103,38 @@ function resolveProfileFromInputSync({ userInput, aiOutput, threshold } = {}) {
 
 async function buildUserProfile(input) {
   const safeInput = input && typeof input === "object" ? input : {};
-  const userInput = toSafeString(safeInput.userInput || safeInput.text || safeInput.input, "");
   const threshold = toSafeNumber(safeInput.threshold, AI_CONFIDENCE_THRESHOLD);
-  const fallback = buildFallbackProfile(userInput);
 
   if (!FEATURE_FLAGS.useAIProfiling) {
-    return fallback;
+    throw new Error("AI profiling is disabled");
   }
 
-  try {
-    const aiRaw = await getAIProfile(userInput);
+  const fallback = buildFallbackProfile(safeInput);
+  const validation = validateAIProfile(fallback);
 
-    if (!aiRaw) {
-      logLLMFallback({ endpoint: "ai/profile", request_id: "ai_profile_async", reason: "empty_ai_response" });
-      return fallback;
-    }
+  logLLMValidation({
+    endpoint: "ai/profile",
+    request_id: "ai_profile_async",
+    valid: validation.valid,
+    errors: validation.errors || [],
+  });
 
-    const sanitized = sanitizeAIProfile(aiRaw);
-    const validation = validateAIProfile(sanitized);
-
-    logLLMValidation({
-      endpoint: "ai/profile",
-      request_id: "ai_profile_async",
-      valid: validation.valid,
-      errors: validation.errors || [],
-    });
-
-    if (!validation.valid) {
-      logLLMFallback({ endpoint: "ai/profile", request_id: "ai_profile_async", reason: "schema_validation_failed" });
-      return fallback;
-    }
-
-    const gated = applyAIGate(sanitized, threshold);
-
-    if (!gated) {
-      logLLMFallback({ endpoint: "ai/profile", request_id: "ai_profile_async", reason: "confidence_below_threshold" });
-      return fallback;
-    }
-
-    return gated;
-  } catch (error) {
-    logLLMFallback({ endpoint: "ai/profile", request_id: "ai_profile_async", reason: "profile_request_failed" });
-    return fallback;
+  if (!validation.valid) {
+    logLLMFallback({ endpoint: "ai/profile", request_id: "ai_profile_async", reason: "schema_validation_failed" });
+    throw new Error("AI profile schema validation failed");
   }
+
+  const gated = applyAIGate(fallback, threshold);
+  if (!gated) {
+    logLLMFallback({ endpoint: "ai/profile", request_id: "ai_profile_async", reason: "confidence_below_threshold" });
+    throw new Error("AI profile confidence below threshold");
+  }
+
+  return gated;
 }
 
 module.exports = {
   buildUserProfile,
   resolveProfileFromInputSync,
+  buildFallbackProfile,
 };

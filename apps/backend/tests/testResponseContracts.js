@@ -45,5 +45,9 @@ function assert(condition, message) {
   assert(traceValidation.valid, `Trace_v1 invalid: ${JSON.stringify(traceValidation.errors || [])}`);
 
   console.log("PASS: response and trace are contract compliant");
-})();
+})().catch((err) => {
+  console.error("FAIL: response contracts");
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+});
 

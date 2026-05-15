@@ -9,7 +9,7 @@ const redis = require("../../services/cache/redis.service");
 const { logError } = require("../../observability/logger");
 const { recordError } = require("../../observability/metrics");
 
-const IDEMPOTENCY_TTL_SECONDS = Number(process.env.AYUDIET_IDEMPOTENCY_TTL_SECONDS || 300);
+const IDEMPOTENCY_TTL_SECONDS = Number(process.env.AAROGYA_IDEMPOTENCY_TTL_SECONDS || 300);
 
 function stableStringify(value) {
   if (Array.isArray(value)) {

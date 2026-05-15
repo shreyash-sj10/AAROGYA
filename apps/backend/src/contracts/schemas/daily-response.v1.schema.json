@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "DailyResponse_v1",
+  "title": "DailyResponse_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meals",
+    "meta"
+  ],
+  "properties": {
+    "meals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "breakfast",
+        "lunch",
+        "dinner"
+      ],
+      "properties": {
+        "breakfast": {
+          "$ref": "DecisionResponse_v1"
+        },
+        "lunch": {
+          "$ref": "DecisionResponse_v1"
+        },
+        "dinner": {
+          "$ref": "DecisionResponse_v1"
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "score_avg",
+        "confidence_avg"
+      ],
+      "properties": {
+        "score_avg": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "confidence_avg": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

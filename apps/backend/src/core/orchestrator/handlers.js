@@ -217,7 +217,22 @@ async function handleGeneralQuery(input, context) {
   const lastPlan = assertValidDecisionResponse(safeContext.last_plan, "handlers.handleGeneralQuery.input");
 
   const query = toSafeInputText(input);
-  const rag = await getRAGExplanation(query);
+  const rag = await getRAGExplanation({
+    query,
+    session_id: toSafeString(toSafeObject(input).session_id || toSafeObject(context).session_id || "pipeline_session"),
+    context: {
+      user_profile: toSafeObject(toSafeObject(context).user_profile || {}),
+      symptoms: {
+        extracted_tags: toSafeArray(toSafeObject(context).symptoms || []),
+        risk_flags: toSafeArray(toSafeObject(toSafeObject(context).user_profile).risk_flags || []),
+      },
+      current_plan: toSafeObject(lastPlan),
+    },
+    retrieved_documents: {
+      planner_reasoning: toSafeObject(toSafeObject(lastPlan).trace || {}),
+      knowledge_docs: [],
+    },
+  });
   const safeExplanation = toSafeObject(lastPlan.explanation);
 
   const response = {
@@ -250,3 +265,4 @@ function buildHandlers(deps) {
 module.exports = {
   buildHandlers,
 };
+

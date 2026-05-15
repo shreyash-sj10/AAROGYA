@@ -1,9 +1,6 @@
 const { buildErrorResponse } = require("../../contracts/errorBuilder");
 const { estimatePrakriti } = require("./prakriti.service");
-
-function toSafeObject(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
+const { toSafeObject } = require("../../utils/safeUtils");
 
 function registerPrakritiRoutes(app) {
   if (!app || typeof app.post !== "function") {

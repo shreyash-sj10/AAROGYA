@@ -1,3 +1,5 @@
+const { normalizeString, normalizeStringArray } = require("../../utils/normalizeInput");
+
 const symptomMap = {
   acidity: ["high_pitta"],
   bloating: ["high_vata"],
@@ -18,16 +20,7 @@ const KEYWORD_TO_FLAGS = {
   fatigue: ["digestion_weak"],
 };
 
-function toSafeStringArray(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter((item) => typeof item === "string")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-}
+// Removed toSafeStringArray - now using normalizeStringArray from normalizeInput.js
 
 function uniqueValues(values) {
   return Array.from(new Set(values));
@@ -35,7 +28,7 @@ function uniqueValues(values) {
 
 function normalizeInterpretation(result, fallbackSymptomTags) {
   const safeResult = result && typeof result === "object" ? result : {};
-  const normalizedSymptomTags = toSafeStringArray(
+  const normalizedSymptomTags = normalizeStringArray(
     Array.isArray(safeResult.symptom_tags) && safeResult.symptom_tags.length > 0
       ? safeResult.symptom_tags
       : fallbackSymptomTags
@@ -43,7 +36,7 @@ function normalizeInterpretation(result, fallbackSymptomTags) {
 
   return {
     symptom_tags: uniqueValues(normalizedSymptomTags),
-    risk_flags: uniqueValues(toSafeStringArray(safeResult.risk_flags)),
+    risk_flags: uniqueValues(normalizeStringArray(safeResult.risk_flags)),
   };
 }
 
@@ -70,7 +63,7 @@ function buildFallbackInterpretation(symptoms) {
 }
 
 function interpretSymptoms(symptoms, options) {
-  const normalizedSymptoms = uniqueValues(toSafeStringArray(symptoms));
+  const normalizedSymptoms = uniqueValues(normalizeStringArray(symptoms));
 
   try {
     return callMLService(normalizedSymptoms, options);
@@ -79,12 +72,10 @@ function interpretSymptoms(symptoms, options) {
   }
 }
 
-function toSafeString(value) {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
+// Removed toSafeString - now using normalizeString from normalizeInput.js
 
 function parseUserInputDeterministic(input) {
-  const text = toSafeString(input);
+  const text = normalizeString(input);
 
   const riskFlags = Object.keys(KEYWORD_TO_FLAGS).reduce((acc, keyword) => {
     if (text.includes(keyword)) {

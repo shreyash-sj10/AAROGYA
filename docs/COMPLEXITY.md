@@ -1,6 +1,6 @@
 # Complexity Analysis
 
-This document defines the deterministic runtime and memory profile for the AYUDIET decision pipeline under the Phase 3 proof system plus engineering-depth instrumentation.
+This document defines the deterministic runtime and memory profile for the AAROGYA decision pipeline under the Phase 3 proof system plus engineering-depth instrumentation.
 
 ## Time Complexity
 

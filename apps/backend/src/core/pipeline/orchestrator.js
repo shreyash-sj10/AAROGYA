@@ -1,10 +1,20 @@
 const { _runPipelineInternal } = require("./pipeline");
-const { validateDecisionRequest } = require("../../contracts/validators/validateDecisionRequest");
-const { validateTrace } = require("../../contracts/validators/validateTrace");
 const { buildDecisionResponse } = require("../../contracts/builders/decisionResponse.builder");
+const { validateDecisionRequest } = require("../../contracts/validators");
 const { ContractViolationError } = require("../../contracts/errors/ContractViolationError");
-const { generateExplanation } = require("../../modules/explanation/explanationEngine");
+const { generateExplanationWithAI } = require("../../modules/explanation/explanationEngine");
 const { recordRequest, recordError, recordAIDisagreement, getSnapshot } = require("../../observability/metrics");
+const { logRequestStart, logRequestEnd, logError } = require("../../observability/logger");
+const { getRequestContext } = require("../../observability/requestContext");
+const { getRecentMeals } = require("../../repositories/history.repository");
+const { persistPostPlanArtifacts } = require("../../services/db/planDecisionPersistence");
+const { getMLInterpretation } = require("../../services/ml/interpretationClient");
+const { getUserWeightsAsync } = require("../../modules/adaptive/userPreference.repository");
+const { toSafeString, toSafeNumber } = require("../../utils/normalizeInput");
+const { computeAdaptiveScore } = require("../../modules/adaptive/adaptiveScore.engine");
+const { getFoodsSource } = require("../../repositories/food.repository");
+const { getRulesSource } = require("../../repositories/rule.repository");
+const { getTemplatesSource } = require("../../repositories/template.repository");
 
 const AI_FORBIDDEN_KEYS = new Set([
   "meal",
@@ -24,12 +34,42 @@ function toSafeObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function toSafeString(value, fallback = "") {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+function assertRuntimeDataSources() {
+  const sources = {
+    foods: getFoodsSource(),
+    rules: getRulesSource(),
+    templates: getTemplatesSource(),
+  };
+
+  const fallbackKeys = Object.keys(sources).filter((key) => String(sources[key]).toLowerCase() !== "db");
+  if (fallbackKeys.length > 0) {
+    console.warn(`[WARNING] fallback in production path: ${fallbackKeys.join(", ")}`);
+    if (process.env.REQUIRE_DB === "true") {
+      throw new ContractViolationError("Fallback blocked by REQUIRE_DB", {
+        source: "orchestrator",
+        fallback_sources: fallbackKeys,
+      });
+    }
+  }
 }
 
-function toSafeNumber(value, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+function validateAdaptiveActivation() {
+  const probeFood = {
+    id: "adaptive_probe_rice",
+    recipe_id: "adaptive_probe_rice",
+    name: "Basmati Rice",
+  };
+
+  const likeScore = computeAdaptiveScore(probeFood, {
+    user_history: { liked_foods: ["Basmati Rice"] },
+  });
+  const dislikeScore = computeAdaptiveScore(probeFood, {
+    user_history: { disliked_foods: ["Basmati Rice"] },
+  });
+  const active = likeScore !== dislikeScore;
+
+  console.info(`[ADAPTIVE] ${active ? "active" : "inactive"} like=${likeScore} dislike=${dislikeScore}`);
+  return active;
 }
 
 function normalizeMealType(value) {
@@ -85,15 +125,15 @@ function resolveResponseVersions(input) {
 
   return {
     model_version: toSafeString(
-      safeMeta.model_version || process.env.AYUDIET_AI_MODEL_VERSION,
+      safeMeta.model_version || process.env.AAROGYA_AI_MODEL_VERSION,
       "assistive_offline_v1"
     ),
     prompt_version: toSafeString(
-      safeMeta.prompt_version || process.env.AYUDIET_AI_PROMPT_VERSION,
+      safeMeta.prompt_version || process.env.AAROGYA_AI_PROMPT_VERSION,
       "prompt_v1"
     ),
     rules_version: toSafeString(
-      safeInput.rules_version || safeMeta.rules_version || process.env.AYUDIET_RULES_VERSION,
+      safeInput.rules_version || safeMeta.rules_version || process.env.AAROGYA_RULES_VERSION,
       "rules_v1"
     ),
   };
@@ -243,22 +283,68 @@ function buildDecisionRequestPayload(input) {
   };
 }
 
-function executeGeneratePlanCore(input) {
+async function executeGeneratePlanCore(input) {
   const startedAt = Date.now();
   const safeInput = toSafeObject(input);
+  let request = null;
+  let userId = "anonymous";
+  let outcomeStatus = "error";
 
   try {
     assertNoAIDecisionLeak(toSafeObject(safeInput.aiProfile));
 
-    const request = buildDecisionRequestPayload(safeInput);
+    request = buildDecisionRequestPayload(safeInput);
     throwOnInvalidValidation(validateDecisionRequest(request), "DecisionRequest_v1");
+    assertRuntimeDataSources();
+    userId = toSafeString(toSafeObject(safeInput.userState).user_id || toSafeObject(safeInput.userState).userId, "anonymous");
+
+    logRequestStart({
+      request_id: request.request_id,
+      trace_id: request.trace_id,
+      user_id: userId,
+      intent: "GENERATE_PLAN",
+    });
+
+    let persistentHistory = [];
+    try {
+      persistentHistory = await getRecentMeals(userId);
+    } catch (historyError) {
+      const message = historyError instanceof Error ? historyError.message : String(historyError || "unknown");
+      console.warn(`[Orchestrator] History unavailable, proceeding without DB history: ${message}`);
+      persistentHistory = [];
+    }
+    const providedHistory = toSafeArray(toSafeObject(safeInput.context).history);
+    const mergedHistory = [...providedHistory, ...toSafeArray(persistentHistory)];
+
+    // Call ML Interpretation asynchronously if a query or symptoms are present
+    const query = toSafeString(safeInput.query || toSafeObject(safeInput.meta).query || toSafeArray(toSafeObject(safeInput.userState).symptoms).join(" "));
+    const mlInterpretation = query ? await getMLInterpretation(query, {
+      request_id: request.request_id,
+      trace_id: request.trace_id
+    }) : null;
+
+    const adaptiveWeights = await getUserWeightsAsync(userId);
+    const hydratedUserState = {
+      ...toSafeObject(safeInput.userState),
+      adaptive_weights: toSafeObject(adaptiveWeights),
+    };
 
     const pipelineResult = _runPipelineInternal({
       mealType: normalizeMealType(safeInput.mealType || toSafeObject(toSafeObject(safeInput.userState).context).meal_type),
       foods: toSafeArray(safeInput.foods),
       rules: toSafeArray(safeInput.rules),
-      userState: toSafeObject(safeInput.userState),
+      userState: hydratedUserState,
       userHistory: toSafeObject(safeInput.userHistory),
+      constraints: toSafeObject(safeInput.constraints),
+      mlInterpretation, // Passed to pipeline for deterministic merge
+      meta: {
+        trace_id: request.trace_id,
+        timestamp: request.meta.timestamp,
+      },
+      context: {
+        ...toSafeObject(safeInput.context),
+        history: mergedHistory,
+      },
     });
 
     const stageStats = toSafeObject(pipelineResult.stageStats);
@@ -266,29 +352,45 @@ function executeGeneratePlanCore(input) {
 
     const reliability = toSafeObject(pipelineResult.reliability);
 
-    const explanation = generateExplanation({
+    const explanation = await generateExplanationWithAI({
       meal: toSafeArray(reliability.mealPlan).map((item) => toSafeObject(item).name).filter(Boolean),
       score: toSafeNumber(reliability.score, 0),
       breakdown: toSafeObject(reliability.breakdown),
     }, toSafeObject(safeInput.userState), {
       relaxation_applied: Boolean(toSafeObject(reliability.meta).fallback_used),
+      ml_used: Boolean(toSafeObject(toSafeObject(pipelineResult.stageStats).interpretation_layer).ml_used),
     });
 
     const responseVersions = resolveResponseVersions(safeInput);
+    const requestMeta = toSafeObject(request.meta);
+    const traceTimestamp = Number.isInteger(requestMeta.timestamp)
+      ? requestMeta.timestamp
+      : Math.max(0, Math.floor(Date.now() / 1000));
+
+    const fallbackReason = toSafeString(toSafeObject(reliability.meta).fallback_reason, "");
+    const baseWarnings = toSafeArray(toSafeObject(explanation).warnings);
+    const warnings = !fallbackReason || fallbackReason === "SAFE_P0_ONLY"
+      ? baseWarnings
+      : [...baseWarnings, JSON.stringify({ reason: fallbackReason })];
 
     const response = buildDecisionResponse({
-      request,
+      request: {
+        request_id: request.request_id,
+        trace_id: request.trace_id,
+        meta: { timestamp: traceTimestamp },
+      },
       internal: {
         mealPlan: toSafeArray(reliability.mealPlan),
         score: toSafeNumber(reliability.score, 0),
-        breakdown: toSafeObject(reliability.breakdown),
         nutrition_summary: toSafeObject(reliability.nutrition_summary),
         confidence: toSafeObject(reliability.confidence),
         explanation: {
           deterministic: toSafeString(toSafeObject(explanation).deterministic, "Meal selected by deterministic engine."),
-          ai_explanation: "",
-          citations: [],
+          ai_explanation: toSafeString(toSafeObject(explanation).ai_explanation, ""),
+          citations: toSafeArray(toSafeObject(explanation).citations),
         },
+        insights: toSafeArray(toSafeObject(explanation).highlights),
+        warnings,
         meta: {
           latency_ms: Math.max(0, Date.now() - startedAt),
           cache_hit: false,
@@ -300,8 +402,6 @@ function executeGeneratePlanCore(input) {
       stageStats,
     });
 
-    throwOnInvalidValidation(validateTrace(response.trace), "Trace_v1");
-
     const aiSuggestion = extractAISuggestion(safeInput);
     const finalDecision = toSafeArray(response.meal_plan).map((item) => toSafeObject(item).recipe_id);
     recordAIDisagreement({
@@ -310,23 +410,79 @@ function executeGeneratePlanCore(input) {
     });
 
     const safeTimings = toSafeObject(pipelineResult.timings);
+    const relMetaForMetrics = toSafeObject(reliability.meta);
+    const ceForMetrics = toSafeObject(stageStats.constraint_engine);
     recordRequest({
       latency_ms: toSafeNumber(toSafeObject(response.meta).latency_ms, 0),
       pipeline_ms: toSafeNumber(safeTimings.pipeline_ms, 0),
       optimizer_ms: toSafeNumber(safeTimings.optimizer_ms, 0),
       candidate_count: Math.max(0, Math.trunc(toSafeNumber(toSafeObject(stageStats.optimizer).input_count, 0))),
-      usedFallback: Boolean(toSafeObject(reliability.meta).fallback_used),
+      usedFallback: Boolean(relMetaForMetrics.fallback_used),
       confidenceLevel: toSafeString(toSafeObject(response.confidence).level, "low"),
+      score: toSafeNumber(response.score, 0),
+      confidenceValue: toSafeNumber(toSafeObject(response.confidence).value, 0),
+      p0_violations: Math.max(0, Math.trunc(toSafeNumber(ceForMetrics.p0_violations, 0))),
+      relaxation_level: Math.max(0, Math.trunc(toSafeNumber(relMetaForMetrics.relaxation_level, 0))),
+      fallback_reason: toSafeString(relMetaForMetrics.fallback_reason, ""),
     });
 
+    // Issue 2: Await storage for strict determinism across close calls
+    try {
+      const persisted = await persistPostPlanArtifacts({
+        userId,
+        mealPlan: response.meal_plan,
+        category: request.user_state.context.meal_type,
+        decision: {
+          request_id: response.request_id,
+          trace_id: response.trace_id,
+          request_payload: request,
+          response_payload: response,
+          execution_trace: toSafeObject(response.trace),
+          safe_trace: toSafeObject(toSafeObject(response.trace).stages),
+        },
+      });
+      if (!persisted.ok) {
+        console.warn(`[Orchestrator] Post-plan persistence failed: ${persisted.reason}`);
+      }
+    } catch (err) {
+      console.warn(`[Orchestrator] Audit storage failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    outcomeStatus = "ok";
     return response;
   } catch (error) {
+    const ctx = getRequestContext();
+    const rid = request?.request_id || ctx.requestId || "unknown_request";
+    const tid = request?.trace_id || "unknown_trace";
+    const errType = error instanceof ContractViolationError ? "SCHEMA_VALIDATION_FAILED" : "SYSTEM_ERROR";
+    logError({
+      request_id: rid,
+      trace_id: tid,
+      user_id: userId,
+      intent: "GENERATE_PLAN",
+      error_type: errType,
+      message: error instanceof Error ? error.message : String(error || "unknown"),
+      failureReason: error instanceof Error ? error.message : String(error || "unknown"),
+    });
+
     if (error instanceof ContractViolationError) {
       recordError("SCHEMA_VALIDATION_FAILED");
     } else {
       recordError("SYSTEM_ERROR");
     }
     throw error;
+  } finally {
+    const ctx = getRequestContext();
+    const rid = request?.request_id || ctx.requestId || "unknown_request";
+    const tid = request?.trace_id || "unknown_trace";
+    logRequestEnd({
+      request_id: rid,
+      trace_id: tid,
+      user_id: userId,
+      intent: "GENERATE_PLAN",
+      latency_ms: Date.now() - startedAt,
+      status: outcomeStatus,
+    });
   }
 }
 
@@ -344,7 +500,29 @@ module.exports = {
   getDashboardData,
   ContractViolationError,
   assertNoAIDecisionLeak,
+  validateAdaptiveActivation,
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

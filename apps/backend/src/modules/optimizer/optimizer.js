@@ -9,18 +9,33 @@ function cloneFood(food) {
     return food;
   }
 
+  const evaluation = food.evaluation && typeof food.evaluation === "object"
+    ? food.evaluation
+    : null;
+  const triggeredRules = toSafeArray(evaluation && evaluation.triggeredRules);
+
+  if (triggeredRules.length === 0) {
+    return {
+      ...food,
+      evaluation: evaluation
+        ? { ...evaluation, triggeredRules: [] }
+        : {
+          isValid: true,
+          totalPenalty: 0,
+          triggeredRules: [],
+        },
+      breakdown: food.breakdown && typeof food.breakdown === "object"
+        ? { ...food.breakdown }
+        : {},
+    };
+  }
+
   return {
     ...food,
-    evaluation: food.evaluation && typeof food.evaluation === "object"
-      ? {
-        ...food.evaluation,
-        triggeredRules: toSafeArray(food.evaluation.triggeredRules).map((rule) => ({ ...rule })),
-      }
-      : {
-        isValid: true,
-        totalPenalty: 0,
-        triggeredRules: [],
-      },
+    evaluation: {
+      ...evaluation,
+      triggeredRules: triggeredRules.map((rule) => ({ ...rule })),
+    },
     breakdown: food.breakdown && typeof food.breakdown === "object"
       ? { ...food.breakdown }
       : {},
@@ -84,6 +99,7 @@ function attachStats(result, stats) {
       outputCount: Math.max(0, Math.trunc(toSafeNumber(stats.outputCount, 0))),
       combinationsEvaluated: Math.max(0, Math.trunc(toSafeNumber(stats.combinationsEvaluated, 0))),
       selectedScore: Math.max(0, Math.min(1, toSafeNumber(stats.selectedScore, 0))),
+      secondBestScore: Math.max(0, Math.min(1, toSafeNumber(stats.secondBestScore, 0))),
       reason: "optimizer_selection",
     },
     enumerable: false,
@@ -143,7 +159,7 @@ function optimizeMeal(template, candidates) {
 
   const candidatesByCategory = buildCandidatesByCategory(categoryEntries);
   const greedySolution = buildGreedySolution(candidatesByCategory);
-  const beamSolution = runBeamSearch(candidatesByCategory, OPTIMIZER_CONFIG.beamWidth);
+  const beamSolution = runBeamSearch(candidatesByCategory, OPTIMIZER_CONFIG.beamWidth, OPTIMIZER_CONFIG);
 
   let selectedSolution = beamSolution;
 
@@ -184,6 +200,7 @@ function optimizeMeal(template, candidates) {
     outputCount: selectedFoods.length > 0 ? 1 : 0,
     combinationsEvaluated: combinationCount,
     selectedScore: totalScore,
+    secondBestScore: toSafeNumber(selectedSolution.secondBestScore, 0),
   });
 }
 

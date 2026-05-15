@@ -31,12 +31,12 @@ export function GoalsStep({ showErrors = false }: GoalsStepProps) {
   }, [showErrors, touched, goals]);
 
   const inputClass =
-    "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500";
+    "mt-1 w-full rounded-xl border border-[#E6E1D8] bg-white px-3 py-2 text-sm text-[#2F2F2F] focus:border-[#7A6F4B] focus:outline-none focus:ring-1 focus:ring-[#7A6F4B]";
 
   return (
     <section className="flex flex-col gap-2">
       <div>
-        <label htmlFor="onboarding-goals" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="onboarding-goals" className="block text-sm font-medium text-[#2F2F2F]">
           Primary goal
         </label>
         <select
@@ -60,3 +60,4 @@ export function GoalsStep({ showErrors = false }: GoalsStepProps) {
     </section>
   );
 }
+

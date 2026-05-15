@@ -1,21 +1,6 @@
 const QUANTITY_CONFIG = require("../../config/quantity");
 const { createEmptyState } = require("./state.model");
-
-function toSafeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function toSafeObject(value) {
-  return value && typeof value === "object" ? value : {};
-}
-
-function toSafeString(value, fallback) {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
-}
-
-function toSafeNumber(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+const { toSafeObject, toSafeString, toSafeNumber, toSafeArray } = require("../utils/safeUtils");
 
 function toNonNegative(value) {
   return Math.max(0, toSafeNumber(value, 0));

@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "PlanWeeklyRequest_v1",
+  "title": "PlanWeeklyRequest_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["user_context"],
+  "properties": {
+    "user_context": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["user_id"],
+      "properties": {
+        "user_id": { "type": "string", "minLength": 1 },
+        "goals": { "type": "array", "items": { "type": "string" } },
+        "risk_flags": { "type": "array", "items": { "type": "string" } },
+        "symptoms": { "type": "array", "items": { "type": "string" } },
+        "dosha_estimate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["vata", "pitta", "kapha"],
+          "properties": {
+            "vata": { "type": "number", "minimum": 0 },
+            "pitta": { "type": "number", "minimum": 0 },
+            "kapha": { "type": "number", "minimum": 0 }
+          }
+        },
+        "allergies": { "type": "array", "items": { "type": "string" } },
+        "preferences": { "type": "array", "items": { "type": "string" } },
+        "diet_type": { "type": "string" },
+        "goal": { "type": "string" },
+        "target_calories": { "type": "number", "minimum": 0 },
+        "context": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "season": { "type": "string" }
+          }
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "max_calories": { "type": "number", "minimum": 0 },
+        "diet_type": { "type": "string" },
+        "season": { "type": "string" }
+      }
+    },
+    "preferences": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "liked_foods": { "type": "array", "items": { "type": "string" } },
+        "disliked_foods": { "type": "array", "items": { "type": "string" } },
+        "interaction_logs": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "days": { "type": "integer", "minimum": 1, "maximum": 7, "default": 7 }
+  }
+}

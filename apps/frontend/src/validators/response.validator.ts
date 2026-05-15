@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { traceSchema } from "@/validators/trace.validator";
 
+const mealNutritionSchema = z.object({
+  calories: z.number().nonnegative(),
+  protein: z.number().nonnegative(),
+  carbs: z.number().nonnegative(),
+  fat: z.number().nonnegative(),
+}).strict();
+
 const mealItemSchema = z.object({
   recipe_id: z.string().min(1),
   name: z.string().min(1),
@@ -8,6 +15,7 @@ const mealItemSchema = z.object({
     value: z.number().nonnegative(),
     unit: z.string().min(1),
   }).strict(),
+  nutrition: mealNutritionSchema.optional(),
 }).strict();
 
 const nutritionSummarySchema = z.object({
@@ -64,6 +72,8 @@ export const decisionResponseSchema = z.object({
   confidence: confidenceSchema,
   trace: traceSchema,
   explanation: explanationSchema,
+  insights: z.array(z.string()),
+  warnings: z.array(z.string()),
   meta: metaSchema,
 }).strict();
 
@@ -72,3 +82,4 @@ export type DecisionResponseSchema = z.infer<typeof decisionResponseSchema>;
 export function validateDecisionResponse(payload: unknown) {
   return decisionResponseSchema.safeParse(payload);
 }
+

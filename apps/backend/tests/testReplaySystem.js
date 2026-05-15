@@ -3,6 +3,12 @@ const { replayAndVerify } = require("../src/core/pipeline/replay/replayEngine");
 const { sampleFoods } = require("../src/modules/food/food.samples");
 const sampleRules = require("../src/rules/engine/rule.samples");
 
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
 function baseInput() {
   return {
     request_id: "replay_request",
@@ -32,12 +38,20 @@ function baseInput() {
   };
 }
 
-(function runReplayProof() {
+(async function runReplayProof() {
+  const iterations = 10;
   const originalRequest = baseInput();
-  const originalOutput = executeGeneratePlanCore(originalRequest);
+  const originalOutput = await executeGeneratePlanCore(originalRequest);
 
-  replayAndVerify(originalRequest, originalOutput.trace, originalOutput);
+  for (let i = 0; i < iterations; i += 1) {
+    const replay = await replayAndVerify(originalRequest, originalOutput.trace, originalOutput);
+    assert(replay && replay.replayOutput, `Missing replay output at run ${i + 1}`);
+    assert(replay.traceHash && replay.outputHash, `Missing replay hashes at run ${i + 1}`);
+  }
 
-  console.log("PASS: replay system reproduces output and trace exactly");
-})();
-
+  console.log(`PASS: replay determinism verified across ${iterations} runs (trace + output identical)`);
+})().catch((error) => {
+  console.error("FAIL: replay system mismatch detected");
+  console.error(error.message);
+  process.exit(1);
+});

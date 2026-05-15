@@ -55,7 +55,7 @@ def render_payload(payload, output_path):
     y = height - 40
 
     pdf.setFont("Helvetica-Bold", 16)
-    text_line(pdf, "AYUDIET Weekly Plan", 40, y)
+    text_line(pdf, "AAROGYA Weekly Plan", 40, y)
     y -= 22
 
     pdf.setFont("Helvetica", 10)

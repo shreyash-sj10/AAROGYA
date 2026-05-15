@@ -1,6 +1,6 @@
 const adherenceRepository = require("../../repositories/adherence.repository");
 const { logError } = require("../../observability/logger");
-const { recordError } = require("../../observability/metrics");
+const { recordError, recordAdherenceEvent } = require("../../observability/metrics");
 
 const logger = {
   error(message, meta = {}) {
@@ -158,6 +158,7 @@ function trackAdherence(user_id, meal_event) {
   };
 
   adherenceRepository.upsertAdherenceSync(saved);
+  recordAdherenceEvent(saved);
   adherenceRepository.upsertAdherence(saved).catch((err) => {
     logger.error("Adherence persistence failed", { err });
     metrics.increment("adherence_write_error");
@@ -222,3 +223,4 @@ module.exports = {
   summarizeAdherence,
   summarizeAdherenceWithAI,
 };
+

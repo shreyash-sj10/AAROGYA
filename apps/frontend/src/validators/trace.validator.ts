@@ -32,46 +32,58 @@ const refinementLoopSchema = z.object({
   impact_on_confidence: z.number(),
 }).strict();
 
-export const traceSchema = z.object({
+const traceStagesSchema = z.object({
+  interpretation_layer: interpretationLayerSchema,
+  candidate_generator: stageCountSchema,
+  constraint_engine: z.object({
+    input_count: z.number().int().nonnegative(),
+    output_count: z.number().int().nonnegative(),
+    rejected: z.number().int().nonnegative(),
+    rules: z.array(traceRuleSchema),
+    p0_rules_checked: z.number().int().nonnegative(),
+    p0_violations: z.number().int().nonnegative(),
+    p0_violated_rule_ids: z.array(z.string().min(1)),
+  }).strict(),
+  scoring_engine: stageCountSchema,
+  diversity_engine: z.object({
+    input_count: z.number().int().nonnegative(),
+    output_count: z.number().int().nonnegative(),
+    historical_matches_count: z.number().int().nonnegative().optional(),
+    diversity_penalty_applied: z.number().nonnegative().optional(),
+  }).strict(),
+  optimizer: z.object({
+    input_count: z.number().int().nonnegative(),
+    output_count: z.number().int().nonnegative(),
+    combinations_evaluated: z.number().int().nonnegative(),
+    selected_score: z.number().min(0).max(1),
+  }).strict(),
+  reliability_engine: z.object({
+    input_count: z.number().int().nonnegative(),
+    output_count: z.number().int().nonnegative(),
+    relaxation_level: z.number().int().min(0).max(4).optional(),
+    relaxed_priorities: z.array(z.string()).optional(),
+    confidence_eval: confidenceEvalSchema.optional(),
+  }).strict(),
+}).strict();
+
+/** Core Trace_v1 fields (matches backend trace.v1.schema.json). */
+const traceCoreSchema = z.object({
   version: z.literal("Trace_v1"),
   schema_version: z.literal(1),
   compatibility: z.literal("backward"),
   trace_id: z.string().min(1),
   timestamp: z.number().int().nonnegative(),
   refinement_loop: refinementLoopSchema.optional(),
-  stages: z.object({
-    interpretation_layer: interpretationLayerSchema,
-    candidate_generator: stageCountSchema,
-    constraint_engine: z.object({
-      input_count: z.number().int().nonnegative(),
-      output_count: z.number().int().nonnegative(),
-      rejected: z.number().int().nonnegative(),
-      rules: z.array(traceRuleSchema),
-      p0_rules_checked: z.number().int().nonnegative(),
-      p0_violations: z.number().int().nonnegative(),
-      p0_violated_rule_ids: z.array(z.string().min(1)),
-    }).strict(),
-    scoring_engine: stageCountSchema,
-    diversity_engine: z.object({
-      input_count: z.number().int().nonnegative(),
-      output_count: z.number().int().nonnegative(),
-      historical_matches_count: z.number().int().nonnegative().optional(),
-      diversity_penalty_applied: z.number().nonnegative().optional(),
-    }).strict(),
-    optimizer: z.object({
-      input_count: z.number().int().nonnegative(),
-      output_count: z.number().int().nonnegative(),
-      combinations_evaluated: z.number().int().nonnegative(),
-      selected_score: z.number().min(0).max(1),
-    }).strict(),
-    reliability_engine: z.object({
-      input_count: z.number().int().nonnegative(),
-      output_count: z.number().int().nonnegative(),
-      relaxation_level: z.number().int().min(0).max(4).optional(),
-      relaxed_priorities: z.array(z.string()).optional(),
-      confidence_eval: confidenceEvalSchema.optional(),
-    }).strict(),
-  }).strict(),
+  stages: traceStagesSchema,
+});
+
+/**
+ * Backend buildDualTrace adds execution + safe (allowed by Trace_v1 JSON schema).
+ * Frontend must accept them or daily/full-day plan validation fails.
+ */
+export const traceSchema = traceCoreSchema.extend({
+  execution: z.record(z.string(), z.unknown()).optional(),
+  safe: traceCoreSchema.optional(),
 }).strict();
 
 export type TraceSchema = z.infer<typeof traceSchema>;

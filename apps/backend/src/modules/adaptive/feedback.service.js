@@ -1,7 +1,7 @@
 const ADAPTIVE_CONFIG = require("../../config/adaptive");
 const { deriveSignalFromFeedback } = require("./signal.engine");
 const { updateWeights } = require("./weight.update");
-const { getUserWeights, saveUserWeights } = require("./userPreference.repository");
+const { getCachedUserWeights, saveUserWeights } = require("./userPreference.repository");
 const { parseFeedback, parseFeedbackSync } = require("./feedback.parser");
 const { logLLMFallback, logLLMValidation } = require("../../observability/llm.logger");
 
@@ -70,12 +70,12 @@ function applyParsedFeedback(user_id, parsed, meal) {
   const mode = modeRaw === "REPLACE" ? "DISLIKE" : modeRaw;
 
   if (mode !== "LIKE" && mode !== "DISLIKE" && mode !== "SKIP") {
-    return getUserWeights(user_id);
+    return getCachedUserWeights(user_id);
   }
 
   const mealFeatures = extractMealFeatures(meal);
   const signal = deriveSignalFromFeedback(mode, mealFeatures);
-  const current = getUserWeights(user_id);
+  const current = getCachedUserWeights(user_id);
   const updated = updateWeights(current, signal, ADAPTIVE_CONFIG.alpha);
 
   return saveUserWeights(user_id, updated);
@@ -107,4 +107,5 @@ module.exports = {
   processFeedback,
   processFeedbackAsync,
 };
+
 

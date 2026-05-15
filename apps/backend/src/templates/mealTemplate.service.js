@@ -1,4 +1,4 @@
-const mealTemplates = require("./mealTemplates.json");
+const { getTemplates, getTemplatesSource } = require("../repositories/template.repository");
 
 const VALID_MEAL_TYPES = ["breakfast", "lunch", "dinner"];
 const VALID_COMPONENT_TYPES = ["fixed", "flexible"];
@@ -100,8 +100,6 @@ function validateTemplates(templates) {
   });
 }
 
-validateTemplates(mealTemplates);
-
 function cloneTemplate(template) {
   return {
     ...template,
@@ -110,8 +108,14 @@ function cloneTemplate(template) {
   };
 }
 
+function readValidatedTemplates() {
+  const templates = getTemplates();
+  validateTemplates(templates);
+  return templates;
+}
+
 function loadTemplates() {
-  return mealTemplates.map(cloneTemplate);
+  return readValidatedTemplates().map(cloneTemplate);
 }
 
 function getTemplatesByMealType(mealType) {
@@ -119,7 +123,7 @@ function getTemplatesByMealType(mealType) {
     throw new Error(`Unsupported meal type "${mealType}".`);
   }
 
-  return mealTemplates
+  const templates = readValidatedTemplates()
     .filter((template) => template.meal_type === mealType)
     .sort((a, b) => {
       if (a.priority !== b.priority) {
@@ -129,6 +133,9 @@ function getTemplatesByMealType(mealType) {
       return a.id.localeCompare(b.id);
     })
     .map(cloneTemplate);
+
+  console.info(`[DATA SOURCE] templates: ${getTemplatesSource()}`);
+  return templates;
 }
 
 function getBestTemplate(mealType) {

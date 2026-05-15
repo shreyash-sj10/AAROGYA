@@ -146,5 +146,77 @@ assert(
   "Deterministic output check"
 );
 
-console.log("ALL TESTS COMPLETED");
+// ─── TEST 5: P0 strict-first-pass ────────────────────────────────────────────
+console.log("\n--- TEST 5: P0 strict-first-pass evaluation ---");
+
+const p0AllergyRule = {
+  id: "p0_test_allergy",
+  priority: "P0",
+  type: "hard_constraint",
+  logic_tree: {
+    AND: [
+      { "user.allergies": "shellfish" },
+      { "food.meta.allergy_tag": "shellfish" },
+    ],
+  },
+  action: { type: "reject", reason: "P0: shellfish allergy violation" },
+};
+
+const p1PenaltyRule = {
+  id: "p1_test_gi",
+  priority: "P1",
+  logic_tree: {
+    AND: [{ "user.conditions": "diabetes" }, { "food.nutrition.glycemic_index": { ">": 70 } }],
+  },
+  action: { type: "reject", reason: "P1: high GI for diabetes" },
+};
+
+const allergyUserState = { allergies: ["shellfish"], conditions: [], context: {} };
+const allergyFoods = [
+  { id: "shrimp", name: "Shrimp", meta: { allergy_tag: "shellfish" }, nutrition: { glycemic_index: 40 } },
+  { id: "dal", name: "Toor Dal", meta: { allergy_tag: "legume" }, nutrition: { glycemic_index: 30 } },
+];
+
+const p0Result = filterFoods(allergyFoods, allergyUserState, [p0AllergyRule, p1PenaltyRule]);
+
+assert(
+  p0Result.rejectedFoods.some((r) => r.food.name === "Shrimp"),
+  "TEST 5: Shrimp rejected by P0 allergy rule"
+);
+assert(
+  p0Result.rejectedFoods.find((r) => r.food.name === "Shrimp")?.triggeredRule.priority === "P0",
+  "TEST 5: rejection is attributed to P0 priority"
+);
+assert(
+  p0Result.validFoods.some((f) => f.name === "Toor Dal"),
+  "TEST 5: Toor Dal passes P0 check"
+);
+
+// ─── TEST 6: P0 stats fields populated ───────────────────────────────────────
+console.log("\n--- TEST 6: P0 stats fields in filterFoods result ---");
+
+assert(
+  typeof p0Result.stats.p0_rules_checked === "number",
+  "TEST 6: stats.p0_rules_checked is a number"
+);
+assert(
+  p0Result.stats.p0_rules_checked >= 1,
+  "TEST 6: stats.p0_rules_checked >= 1 (canonical + test P0 rules)"
+);
+assert(
+  p0Result.stats.p0_violations === 1,
+  "TEST 6: stats.p0_violations = 1 (shrimp violated P0)"
+);
+assert(
+  Array.isArray(p0Result.stats.p0_violated_rule_ids),
+  "TEST 6: stats.p0_violated_rule_ids is an array"
+);
+assert(
+  p0Result.stats.p0_violated_rule_ids.includes("p0_test_allergy"),
+  "TEST 6: violated rule ID 'p0_test_allergy' is in p0_violated_rule_ids"
+);
+
+console.log("\nALL TESTS COMPLETED");
+
+
 

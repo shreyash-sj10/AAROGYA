@@ -1,10 +1,26 @@
 const { SCORING_CONFIG } = require("../../config/scoring");
 const { getNormalizedGoal, normalizeString, toSafeArray, toSafeNumber } = require("../../utils/normalizeInput");
-const { getUserWeights } = require("../adaptive/userPreference.repository");
+const { computeAdaptiveScore } = require("../adaptive/adaptiveScore.engine");
 const FEATURE_FLAGS = require("../../config/featureFlags");
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, value));
+}
+
+function normalizeWeightsInput(userState) {
+  const safeUserState = userState && typeof userState === "object" ? userState : {};
+  const provided = safeUserState.adaptive_weights;
+
+  if (provided && typeof provided === "object") {
+    return {
+      nutrition: toSafeNumber(provided.nutrition, SCORING_CONFIG.WEIGHTS.nutrition),
+      dosha: toSafeNumber(provided.dosha, SCORING_CONFIG.WEIGHTS.dosha),
+      digestibility: toSafeNumber(provided.digestibility, SCORING_CONFIG.WEIGHTS.digestibility),
+      familiarity: toSafeNumber(provided.familiarity, SCORING_CONFIG.WEIGHTS.familiarity),
+    };
+  }
+
+  return { ...SCORING_CONFIG.WEIGHTS };
 }
 
 function getPrimaryGoal(userState) {
@@ -125,14 +141,17 @@ function scoreCandidate(food, userState, template, adaptiveWeights) {
   const familiarityScale = baseFamiliarityWeight > 0
     ? (adaptiveWeights.familiarity / baseFamiliarityWeight)
     : adaptiveWeights.familiarity;
-  const rawScore = (
-    (adaptiveWeights.nutrition * nutrition)
-    + (adaptiveWeights.dosha * dosha)
-    + (adaptiveWeights.digestibility * digestibility)
+  const baseScore = (
+    (adaptiveWeights.digestibility * digestibility)
     + (familiarity * familiarityScale)
     - penalty
   );
+  const doshaScore = adaptiveWeights.dosha * dosha;
+  const nutritionScore = adaptiveWeights.nutrition * nutrition;
+  const adaptiveScore = FEATURE_FLAGS.useAdaptiveScoring ? computeAdaptiveScore(food, userState) : 0;
+  const rawScore = baseScore + doshaScore + nutritionScore + adaptiveScore;
   const score = Number(clamp01(rawScore).toFixed(3));
+  const rankingScore = Number(rawScore.toFixed(6));
 
   return {
     ...food,
@@ -146,8 +165,12 @@ function scoreCandidate(food, userState, template, adaptiveWeights) {
       triggeredRules: [],
     },
     score,
-    finalScore: score,
+    finalScore: rankingScore,
     breakdown: {
+      baseScore: Number(baseScore.toFixed(3)),
+      doshaScore: Number(doshaScore.toFixed(3)),
+      nutritionScore: Number(nutritionScore.toFixed(3)),
+      adaptiveScore: Number(adaptiveScore.toFixed(3)),
       nutrition,
       dosha,
       digestibility,
@@ -161,7 +184,7 @@ function scoreCandidates(candidates, userState, template) {
   const safeCandidates = candidates && typeof candidates === "object" ? candidates : {};
   const safeUserState = userState && typeof userState === "object" ? userState : {};
   const adaptiveWeights = FEATURE_FLAGS.useAdaptiveScoring
-    ? getUserWeights(safeUserState.user_id || safeUserState.userId || "anonymous")
+    ? normalizeWeightsInput(safeUserState)
     : { ...SCORING_CONFIG.WEIGHTS };
 
   const stageStats = {
@@ -198,5 +221,3 @@ module.exports = {
   computeNutritionScore,
   scoreCandidates,
 };
-
-

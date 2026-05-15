@@ -1,9 +1,6 @@
 const { createEmptyState } = require("./state.model");
 const stateRepository = require("../../repositories/state.repository");
-
-function toSafeString(value) {
-  return typeof value === "string" ? value : "";
-}
+const { toSafeString } = require("../utils/safeUtils");
 
 function getStateKey(userId, date) {
   return `${toSafeString(userId)}::${toSafeString(date)}`;

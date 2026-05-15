@@ -107,6 +107,37 @@ function computeRotationPenalty(foodCategory, userHistory) {
 
   return expectedCategory === foodCategory ? 0 : DIVERSITY_CONFIG.WEIGHTS.ROTATION_MISMATCH;
 }
+function computeHistoricalPenalty(foodId, persistentHistory) {
+  if (!foodId || !Array.isArray(persistentHistory) || persistentHistory.length === 0) {
+    return { penalty: 0, matchCount: 0 };
+  }
+
+  const now = Date.now();
+  let totalPenalty = 0;
+  let matchCount = 0;
+
+  persistentHistory.forEach((entry) => {
+    const entryId = normalizeString(toSafeObject(entry).meal_id);
+    if (entryId === foodId) {
+      matchCount++;
+      const ageMs = now - new Date(toSafeObject(entry).timestamp || now).getTime();
+      const ageHours = Math.max(0, ageMs / (1000 * 60 * 60));
+
+      let decayFactor = 0.1;
+      if (ageHours <= 24) decayFactor = 1.0;
+      else if (ageHours <= 48) decayFactor = 0.7;
+      else if (ageHours <= 72) decayFactor = 0.4;
+      else decayFactor = 0.1;
+
+      totalPenalty += (DIVERSITY_CONFIG.WEIGHTS.EXACT_MATCH || 0.3) * decayFactor;
+    }
+  });
+
+  return {
+    penalty: Number(totalPenalty.toFixed(6)),
+    matchCount,
+  };
+}
 
 function computeDiversityPenalty(food, userHistory) {
   const safeHistory = toSafeObject(userHistory);
@@ -114,16 +145,26 @@ function computeDiversityPenalty(food, userHistory) {
   const recentFoods = mergedHistory.foods;
   const categoryCount = mergedHistory.categories;
   const mealsByDay = mergedHistory.mealsByDay;
+  const persistentHistory = toSafeArray(safeHistory.persistentHistory);
+
   const threshold = toSafeNumber(safeHistory.categoryThreshold, DIVERSITY_CONFIG.DEFAULT_CATEGORY_THRESHOLD);
   const recencyWindow = toSafeNumber(safeHistory.recencyWindow, DIVERSITY_CONFIG.DEFAULT_RECENCY_WINDOW);
+  
+  const foodId = normalizeString(food && food.recipe_id ? food.recipe_id : (food && (food.name || food.id)));
   const foodName = normalizeString(food && (food.name || food.recipe_id || food.id));
   const foodCategory = normalizeString(food && food.category);
 
   let penalty = 0;
+  let historicalMatches = 0;
 
   if (foodName && recentFoods.includes(foodName)) {
     penalty += DIVERSITY_CONFIG.WEIGHTS.EXACT_MATCH;
   }
+
+  // Persistent History Penalty
+  const hist = computeHistoricalPenalty(foodId, persistentHistory);
+  penalty += hist.penalty;
+  historicalMatches = hist.matchCount;
 
   penalty += computeRecencyPenalty(foodName, recentFoods, recencyWindow);
   penalty += computeMultiDayPenalty(foodName, mealsByDay);
@@ -134,7 +175,10 @@ function computeDiversityPenalty(food, userHistory) {
 
   penalty += computeRotationPenalty(foodCategory, safeHistory);
 
-  return Number(Math.max(0, penalty).toFixed(6));
+  return {
+    penalty: Number(Math.max(0, penalty).toFixed(6)),
+    historicalMatches,
+  };
 }
 
 function compareDiverseFoods(leftFood, rightFood) {
@@ -155,14 +199,27 @@ function buildStageStats(candidates) {
   return {
     inputCount: Object.keys(candidates).reduce((sum, category) => sum + toSafeArray(candidates[category]).length, 0),
     outputCount: 0,
+    historical_matches_count: 0,
+    diversity_penalty_applied: 0,
     reason: "diversity_penalty",
   };
 }
 
-function decorateCandidate(food, userHistory) {
-  const diversityPenalty = computeDiversityPenalty(food, userHistory);
-  const score = toSafeNumber(food && food.score, 0);
+function decorateCandidate(food, userHistory, statsCollector) {
+  const diversityResult = computeDiversityPenalty(food, userHistory);
+  const score = Number(toSafeNumber(food && food.score, 0).toFixed(3));
+  
+  // Issue 5: Cap penalty at 50% of score
+  const rawPenalty = diversityResult.penalty;
+  const maxAllowedPenalty = Number((score * 0.5).toFixed(3));
+  const diversityPenalty = Number(Math.min(rawPenalty, maxAllowedPenalty).toFixed(3));
+  
   const finalScore = Number((score - diversityPenalty).toFixed(3));
+
+  if (statsCollector) {
+    statsCollector.historical_matches_count += diversityResult.historicalMatches;
+    statsCollector.diversity_penalty_applied += diversityPenalty;
+  }
 
   return {
     ...food,
@@ -189,12 +246,14 @@ function applyDiversity(candidates, userHistory) {
     const categoryFoods = toSafeArray(safeCandidates[category]);
 
     acc[category] = categoryFoods
-      .map((food) => decorateCandidate(food, userHistory))
+      .map((food) => decorateCandidate(food, userHistory, stageStats))
       .sort(compareDiverseFoods);
 
     stageStats.outputCount += acc[category].length;
     return acc;
   }, {});
+
+  stageStats.diversity_penalty_applied = Number(stageStats.diversity_penalty_applied.toFixed(6));
 
   Object.defineProperty(result, "__stageStats", {
     value: stageStats,

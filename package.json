@@ -1,14 +1,21 @@
 {
-  "name": "ayudiet",
+  "name": "aarogya",
   "private": true,
   "workspaces": [
     "apps/backend",
     "apps/frontend"
   ],
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
   "scripts": {
+    "dev": "node apps/backend/scripts/free-listen-port.js && node scripts/print-dev-hint.js && concurrently -k -n backend,frontend -c blue,magenta \"npm run dev -w aarogya-backend\" \"npm run dev -w aarogya-frontend\"",
     "lint": "npm --prefix apps/backend run lint && npm --prefix apps/frontend run lint",
     "build": "npm --prefix apps/backend run build && npm --prefix apps/frontend run build",
     "test:all": "npm --prefix apps/backend run test:all",
+    "test:extended": "npm --prefix apps/backend run test:extended",
+    "golden-path-smoke": "npm --prefix apps/backend run golden-path-smoke",
+    "verify": "npm run lint && npm run build && npm run test:all && npm run test:extended && npm --prefix apps/backend run test:phase1 && npm run golden-path-smoke",
     "test:llm": "npm --prefix apps/backend run test:llm",
     "backend:test": "npm --prefix apps/backend run test:all",
     "backend:contracts": "npm --prefix apps/backend run test:contracts",

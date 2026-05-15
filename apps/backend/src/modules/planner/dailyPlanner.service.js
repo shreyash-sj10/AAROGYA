@@ -1,24 +1,9 @@
 const { validateDecisionResponse } = require("../../contracts/validators/validateDecisionResponse");
 const { buildDecisionResponse } = require("../../contracts/builders/decisionResponse.builder");
 const { ContractViolationError } = require("../../contracts/errors/ContractViolationError");
+const { toSafeObject, toSafeString, toSafeNumber, toSafeArray } = require("../../utils/safeUtils");
 
 const MEAL_TYPES = ["breakfast", "lunch", "dinner"];
-
-function toSafeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function toSafeObject(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-function toSafeString(value, fallback = "") {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
-}
-
-function toSafeNumber(value, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
 
 function deterministicTimestamp(dayIndex) {
   return Math.max(1, Math.trunc(toSafeNumber(dayIndex, 1)) * 1000);
@@ -26,6 +11,7 @@ function deterministicTimestamp(dayIndex) {
 
 function buildMealInput({
   userState,
+  constraints,
   mealType,
   dayIndex,
   foods,
@@ -34,6 +20,7 @@ function buildMealInput({
 }) {
   const safeUserState = toSafeObject(userState);
   const safeContext = toSafeObject(safeUserState.context);
+  const safeUserHistory = toSafeObject(userHistory);
 
   return {
     request_id: `weekly_day_${dayIndex}_${mealType}`,
@@ -46,9 +33,13 @@ function buildMealInput({
         meal_type: mealType,
       },
     },
+    constraints: toSafeObject(constraints),
+    context: {
+      history: toSafeArray(safeUserHistory.persistentHistory),
+    },
     foods: toSafeArray(foods),
     rules: toSafeArray(rules),
-    userHistory: toSafeObject(userHistory),
+    userHistory: safeUserHistory,
     meta: {
       timestamp: deterministicTimestamp(dayIndex) + (mealType === "breakfast" ? 1 : mealType === "lunch" ? 2 : 3),
       request_source: "weekly_planner",
@@ -95,7 +86,15 @@ function aggregateConfidence(responses) {
 function aggregateStageStats(responses) {
   const zero = {
     candidate_generator: { input_count: 0, output_count: 0 },
-    constraint_engine: { input_count: 0, output_count: 0, rejected: 0, rules: [] },
+    constraint_engine: {
+      input_count: 0,
+      output_count: 0,
+      rejected: 0,
+      rules: [],
+      p0_rules_checked: 0,
+      p0_violations: 0,
+      p0_violated_rule_ids: [],
+    },
     scoring_engine: { input_count: 0, output_count: 0 },
     diversity_engine: { input_count: 0, output_count: 0 },
     optimizer: { input_count: 0, output_count: 0, combinations_evaluated: 0, selected_score: 0 },
@@ -113,6 +112,14 @@ function aggregateStageStats(responses) {
     acc.constraint_engine.output_count += Math.max(0, toSafeNumber(toSafeObject(stages.constraint_engine).output_count, 0));
     acc.constraint_engine.rejected += Math.max(0, toSafeNumber(toSafeObject(stages.constraint_engine).rejected, 0));
     acc.constraint_engine.rules = acc.constraint_engine.rules.concat(toSafeArray(toSafeObject(stages.constraint_engine).rules));
+    acc.constraint_engine.p0_rules_checked += Math.max(0, Math.trunc(toSafeNumber(toSafeObject(stages.constraint_engine).p0_rules_checked, 0)));
+    acc.constraint_engine.p0_violations += Math.max(0, Math.trunc(toSafeNumber(toSafeObject(stages.constraint_engine).p0_violations, 0)));
+    toSafeArray(toSafeObject(stages.constraint_engine).p0_violated_rule_ids).forEach((ruleId) => {
+      const safeRuleId = toSafeString(ruleId, "");
+      if (safeRuleId && !acc.constraint_engine.p0_violated_rule_ids.includes(safeRuleId)) {
+        acc.constraint_engine.p0_violated_rule_ids.push(safeRuleId);
+      }
+    });
 
     acc.scoring_engine.input_count += Math.max(0, toSafeNumber(toSafeObject(stages.scoring_engine).input_count, 0));
     acc.scoring_engine.output_count += Math.max(0, toSafeNumber(toSafeObject(stages.scoring_engine).output_count, 0));
@@ -148,6 +155,7 @@ async function generateDayPlan(userState, dayState, options = {}) {
   for (const mealType of MEAL_TYPES) {
     const mealInput = buildMealInput({
       userState,
+      constraints: toSafeObject(safeOptions.constraints),
       mealType,
       dayIndex,
       foods: toSafeArray(safeOptions.foods),
@@ -179,6 +187,12 @@ async function generateDayPlan(userState, dayState, options = {}) {
           value: Math.max(0, toSafeNumber(toSafeObject(safe.quantity).value, 100)),
           unit: toSafeString(toSafeObject(safe.quantity).unit, "grams"),
         },
+        nutrition: {
+          calories: Math.max(0, toSafeNumber(toSafeObject(safe.nutrition).calories, 0)),
+          protein: Math.max(0, toSafeNumber(toSafeObject(safe.nutrition).protein, 0)),
+          carbs: Math.max(0, toSafeNumber(toSafeObject(safe.nutrition).carbs, 0)),
+          fat: Math.max(0, toSafeNumber(toSafeObject(safe.nutrition).fat, 0)),
+        },
       };
     });
   });
@@ -206,6 +220,9 @@ async function generateDayPlan(userState, dayState, options = {}) {
       meta: {
         latency_ms: 0,
         cache_hit: false,
+        model_version: "assistive_offline_v1",
+        prompt_version: "prompt_v1",
+        rules_version: "rules_v1",
       },
     },
     stageStats: aggregateStageStats(responses),
@@ -215,3 +232,4 @@ async function generateDayPlan(userState, dayState, options = {}) {
 module.exports = {
   generateDayPlan,
 };
+

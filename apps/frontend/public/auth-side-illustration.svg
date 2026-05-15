@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1600" role="img" aria-labelledby="title desc">
+  <title id="title">Ayurvedic Herbal Still Life</title>
+  <desc id="desc">A warm botanical composition used as decorative background for authentication pages.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#efe4d1"/>
+      <stop offset="52%" stop-color="#dbe5d6"/>
+      <stop offset="100%" stop-color="#cfdac7"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="20%" cy="18%" r="40%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="82%" cy="80%" r="36%">
+      <stop offset="0%" stop-color="#f7f1e4" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#f7f1e4" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="1600" fill="url(#bg)"/>
+  <circle cx="250" cy="260" r="330" fill="url(#glowA)"/>
+  <circle cx="940" cy="1300" r="380" fill="url(#glowB)"/>
+
+  <g opacity="0.35" fill="#7f8f74" filter="url(#soft)">
+    <ellipse cx="240" cy="1280" rx="190" ry="70"/>
+    <ellipse cx="920" cy="1180" rx="210" ry="76"/>
+    <ellipse cx="610" cy="1030" rx="230" ry="84"/>
+  </g>
+
+  <g fill="#5e744e" opacity="0.92">
+    <path d="M235 1090c35-160 130-282 274-360-44 120-132 248-274 360z"/>
+    <path d="M560 1000c34-149 118-268 248-348-37 113-118 234-248 348z" opacity="0.9"/>
+    <path d="M738 1184c12-124 70-232 174-324-7 94-58 203-174 324z" opacity="0.84"/>
+  </g>
+
+  <g fill="#6f5d3f" opacity="0.95">
+    <path d="M285 1250c60-48 129-74 205-79 74-4 144 12 212 47-59 45-127 70-203 76-76 6-149-9-214-44z"/>
+    <path d="M625 1118c56-44 117-67 185-71 66-3 130 12 192 42-53 40-114 63-182 69-68 5-134-8-195-40z"/>
+  </g>
+
+  <g fill="#b7854e" opacity="0.93">
+    <circle cx="355" cy="1235" r="30"/>
+    <circle cx="422" cy="1210" r="24"/>
+    <circle cx="485" cy="1226" r="28"/>
+    <circle cx="690" cy="1104" r="22"/>
+    <circle cx="742" cy="1080" r="26"/>
+    <circle cx="796" cy="1097" r="20"/>
+  </g>
+
+  <g stroke="#394a35" stroke-width="4" stroke-linecap="round" opacity="0.66">
+    <path d="M170 1355c120-45 250-67 392-66"/>
+    <path d="M562 1289c128 0 257 22 386 67"/>
+  </g>
+
+  <g fill="#2e2f2a" opacity="0.76">
+    <text x="92" y="176" font-family="Georgia, serif" font-size="42" letter-spacing="6">AAROGYA</text>
+    <text x="92" y="244" font-family="Georgia, serif" font-size="30">Ayurveda-Informed Nutrition</text>
+  </g>
+</svg>

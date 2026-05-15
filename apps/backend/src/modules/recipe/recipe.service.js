@@ -1,8 +1,8 @@
 const Ajv = require("ajv");
 const {
-  getRecipesByCategory,
-  getRecipeIngredients,
-  getRecipeAggregate,
+  readRecipesByCategory,
+  readRecipeIngredients,
+  readRecipeAggregate,
 } = require("./recipe.repository");
 const { computeRecipeAggregate } = require("./recipe.aggregate");
 const { recipeAggregateSchema } = require("../../contracts/schemaLoader");
@@ -166,7 +166,7 @@ function normalizeAggregate(candidate, recipe, ingredients, computed) {
   };
 }
 
-async function getValidRecipes(context) {
+function getValidRecipesSync(context) {
   const safeContext = toSafeObject(context);
   const category = toSafeString(safeContext.category, "");
 
@@ -178,7 +178,7 @@ async function getValidRecipes(context) {
   const allergySet = getAllergySet(safeContext);
   const vegetarianOnly = requiresVegetarian(safeContext);
 
-  const recipes = await getRecipesByCategory(category);
+  const recipes = readRecipesByCategory(category);
   const safeRecipes = toSafeArray(recipes);
   const output = [];
 
@@ -193,7 +193,7 @@ async function getValidRecipes(context) {
       continue;
     }
 
-    const recipeIngredients = normalizeIngredients(await getRecipeIngredients(safeRecipe.id));
+    const recipeIngredients = normalizeIngredients(readRecipeIngredients(safeRecipe.id));
 
     if (recipeIngredients.length === 0) {
       continue;
@@ -204,7 +204,7 @@ async function getValidRecipes(context) {
     }
 
     const computedAggregate = computeRecipeAggregate(recipeIngredients, foodsMap);
-    const existingAggregate = await getRecipeAggregate(safeRecipe.id);
+    const existingAggregate = readRecipeAggregate(safeRecipe.id);
     const candidateAggregate = normalizeAggregate(existingAggregate, safeRecipe, recipeIngredients, computedAggregate);
 
     const finalAggregate = {
@@ -229,6 +229,11 @@ async function getValidRecipes(context) {
   return output;
 }
 
+async function getValidRecipes(context) {
+  return getValidRecipesSync(context);
+}
+
 module.exports = {
   getValidRecipes,
+  getValidRecipesSync,
 };

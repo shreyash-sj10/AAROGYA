@@ -9,7 +9,7 @@ from api.parse import router as parse_router
 from core.llm_wrapper import llm_health_status
 
 
-app = FastAPI(title="AYUDIET Controlled AI Service")
+app = FastAPI(title="AAROGYA Controlled AI Service")
 app.include_router(profile_router)
 app.include_router(explain_router)
 app.include_router(feedback_router)

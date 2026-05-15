@@ -1,9 +1,102 @@
 const rules = [
+  // ══════════════════════════════════════════════════════════════════════════════
+  // P0 — HARD CONSTRAINTS (non-relaxable, evaluated as strict first-pass invariant)
+  // These rules MUST be checked before any P1/P2/P3 evaluation.
+  // type: "hard_constraint" is a semantic indicator — these can NEVER be relaxed.
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: "p0_allergy_block",
+    name: "Block foods matching user allergy profile",
+    priority: "P0",
+    type: "hard_constraint",
+    category: "allergy",
+    citation: "AAROGYA P0 Safety Policy",
+    logic_tree: {
+      logic: "AND",
+      conditions: [
+        {
+          // Compares user.allergies (array) against food.meta.allergy_tag (string)
+          // using the valueFrom cross-entity resolution added to the constraint engine.
+          // Full evaluation context = { user, food, context } — both sides are reachable.
+          // Works for any allergen — not hardcoded.
+          entity: "user.allergies",
+          operator: "includes",
+          valueFrom: "food.meta.allergy_tag",
+        },
+      ],
+    },
+    action: {
+      type: "reject",
+      message_template: "Food blocked: matches user allergy profile (P0 safety).",
+    },
+  },
+
+  {
+    id: "p0_medical_diabetes_high_gi",
+    name: "High GI foods are an absolute P0 violation for diabetic users",
+    priority: "P0",
+    type: "hard_constraint",
+    category: "medical",
+    citation: "AAROGYA Medical Safety Policy — Diabetes Management",
+    logic_tree: {
+      logic: "AND",
+      conditions: [
+        {
+          entity: "user.conditions",
+          operator: "includes",
+          value: "diabetes",
+        },
+        {
+          entity: "food.nutrition.glycemic_index",
+          operator: ">",
+          value: 70,
+        },
+      ],
+    },
+    action: {
+      type: "reject",
+      message_template: "High GI food is an absolute P0 medical violation for diabetic users.",
+    },
+  },
+
+  {
+    id: "p0_dietary_ban_non_vegetarian",
+    name: "Non-vegetarian food is banned for vegetarian dietary constraint",
+    priority: "P0",
+    type: "hard_constraint",
+    category: "dietary",
+    citation: "AAROGYA Dietary Contract Policy",
+    logic_tree: {
+      logic: "AND",
+      conditions: [
+        {
+          entity: "context.diet_type",
+          operator: "=",
+          value: "vegetarian",
+        },
+        {
+          entity: "food.meta.is_vegetarian",
+          operator: "=",
+          value: false,
+        },
+      ],
+    },
+    action: {
+      type: "reject",
+      message_template: "Non-vegetarian food is blocked by dietary P0 constraint.",
+    },
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // P1 — HIGH PRIORITY CONSTRAINTS (hard reject, break on violation)
+  // ══════════════════════════════════════════════════════════════════════════════
+
   {
     id: "high_gi_sensitive_reject",
     name: "High GI foods are rejected for high GI sensitive users",
     priority: "P1",
-    citation: "AYUDIET metabolic control policy",
+    citation: "AAROGYA metabolic control policy",
     logic_tree: {
       logic: "AND",
       conditions: [
@@ -128,7 +221,7 @@ const rules = [
     id: "weak_digestion_heavy_food_restriction",
     name: "Weak digestion should avoid very heavy foods",
     priority: "P1",
-    citation: "AYUDIET digestive protection policy",
+    citation: "AAROGYA digestive protection policy",
     logic_tree: {
       logic: "AND",
       conditions: [
@@ -483,7 +576,7 @@ const rules = [
     id: "acidity_hot_food_restriction",
     name: "Acidity symptoms should avoid hot foods",
     priority: "P2",
-    citation: "AYUDIET symptom management policy",
+    citation: "AAROGYA symptom management policy",
     logic_tree: {
       logic: "AND",
       conditions: [

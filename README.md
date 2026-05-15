@@ -1,20 +1,15 @@
 # AAROGYA
+### A contract-first deterministic meal planning engine for Ayurveda-informed nutrition.
+> "A deterministic planning platform where safety constraints and versioned contracts govern meal decisions."
 
-### Contract-first meal intelligence for Ayurveda-informed planning with a deterministic safety core.
-
-> Deterministic meal planning and recommendation where hard constraints and versioned APIs decide the plate—not the LLM.
-
-![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)
-![Stack](https://img.shields.io/badge/monorepo-backend%20%7C%20frontend%20%7C%20ai--service-2563eb)
-![Contracts](https://img.shields.io/badge/contracts-DecisionRequest%2FResponse_v1-0f766e)
+![Tech Stack](https://img.shields.io/badge/stack-React%20%7C%20Node.js%20%7C%20PostgreSQL%20%7C%20FastAPI-2563eb)
+![License](https://img.shields.io/badge/license-Proprietary%20(No%20LICENSE%20file)-8b5cf6)
 
 ---
 
 ## Overview
 
-People who want constitution-aware eating often get either generic calorie advice or opaque AI meal lists that ignore allergies, diet rules, and reproducibility. **AAROGYA** targets **constraint-heavy and constitution-curious planners** (B2C) and **integrators** (B2B-lite) who need auditable outputs.
-
-The system runs a **fixed multi-stage pipeline** (template → candidates → constraints → scoring → diversity → optimizer → reliability) over catalog data, returns **versioned JSON contracts** (`DecisionRequest_v1`, `DecisionResponse_v1`, `Trace_v1`), and uses a **Python assistive service** only for explanation, RAG, prakriti, and parsing—never to override P0 safety or selection fields.
+AAROGYA solves the reliability gap in nutrition planning where AI-generated suggestions can violate hard constraints such as allergies, diet restrictions, and rule priorities. It is built for users and teams that require auditable, repeatable plan generation rather than opaque recommendations. The core approach is a deterministic multi-stage backend pipeline validated by AJV contracts, with optional AI services confined to assistive tasks.
 
 ---
 
@@ -24,218 +19,141 @@ The system runs a **fixed multi-stage pipeline** (template → candidates → co
 
 ```mermaid
 flowchart LR
-  subgraph Client
-    FE[React / Vite App]
-  end
-  subgraph Core
-    API[Express API]
-    ORCH[Pipeline Orchestrator]
-    RULES[Rule + Constraint Engine]
-    OPT[Optimizer + Reliability]
-  end
-  subgraph Data
-    PG[(PostgreSQL)]
-    REDIS[(Redis optional)]
-  end
-  subgraph Assistive
-    AI[FastAPI AI Service]
-    LLM[LLM Provider]
-  end
-
-  FE -->|REST JSON contracts| API
-  API --> ORCH
-  ORCH --> RULES
-  ORCH --> OPT
-  API --> PG
-  API --> REDIS
-  ORCH -->|optional timeout-bound| AI
-  AI --> LLM
-  FE -.->|no direct decision fields| AI
+    A[React Client] --> B[Express API]
+    B --> C[Deterministic Planner Pipeline]
+    C --> D[(PostgreSQL)]
+    B --> E[(Redis Optional)]
+    B --> F[FastAPI AI Assistive Service]
 ```
 
 ### Key Design Decisions
 
-**Contract-first API and module boundaries**  
-Every plan request/response is AJV-validated against immutable `_v1` schemas with `schema_version` and `compatibility`. **Tradeoff:** slower iteration on payloads; breaking changes require `_v2` and coordinated client updates.
+**Contract-first boundary for all planning APIs**  
+All key request/response payloads (`decision`, `daily`, `weekly`, `trace`, `health`, `metrics`) are schema-validated via AJV in `apps/backend/src/contracts`. This reduces silent drift between frontend and backend. Tradeoff: schema evolution is stricter and slower because changes require explicit contract updates.
 
-**Deterministic core with assistive AI on the side**  
-Selection, scoring tie-breaks, and relaxation ladder are fixed in Node; ML/RAG may enrich explanations and profiles but **cannot inject** `meal`, `selection`, or ranking fields (enforced in orchestrator + frontend build guard). **Tradeoff:** AI outages degrade narrative quality, not safety or plan existence.
+**Deterministic planner with non-authoritative AI**  
+Meal selection logic lives in Node modules (`candidate`, `constraint`, `scoring`, `diversity`, `optimizer`, `reliability`) while AI is routed through separate services for interpretation/explanation. This keeps hard planning reproducible under AI failure. Tradeoff: AI cannot opportunistically improve core selection without explicit deterministic rule integration.
 
-**P0-never-relaxed reliability ladder**  
-Recovery passes drop P3, then P2+P3, then P1+P2+P3; P0 rules stay active and outputs are re-checked after each pass. **Tradeoff:** sparse catalogs hit fallback or low-confidence plans instead of unsafe relaxations.
+**Reliability ladder that preserves P0 constraints**  
+Fallback behavior in reliability modules allows progressive relaxation of lower-priority rules, but P0 safety remains enforced and re-validated before response. This guarantees safety floors during sparse-catalog scenarios. Tradeoff: when data is limited, plans may degrade in quality/variety rather than violating constraints.
 
-**Dual persistence model**  
-Prisma handles users, context JSON, history, adherence; raw SQL catalogs supply foods, rules, templates, and plan artifacts at runtime. **Tradeoff:** two migration paths must stay aligned for full production health.
-
-**Hybrid food / recipe unit (transitional)**  
-Candidates can bridge `RecipeAggregate_v1`; scoring and optimizer still operate on food-shaped meal slots until recipe-first migration completes (flag: `AAROGYA_RECIPE_FIRST_PIPELINE`). **Tradeoff:** recipe semantics are not yet end-to-end in the optimizer.
+**Dual runtime modes (full DB vs fallback catalogs)**  
+The backend can operate with DB-backed data or fallback local catalogs (visible in logs as fallback warnings), enabling resilience in partial outage/dev environments. Tradeoff: fallback mode reduces persistence guarantees and can increase repetition in weekly plans.
 
 ---
 
 ## Tech Stack
 
 | Layer | Technology | Why |
-|-------|------------|-----|
-| Frontend | React 18, Vite, Zustand, TypeScript | Planner, onboarding, ops-style dashboard/trace; client routes all decisions through backend APIs |
-| Backend | Node.js, Express, AJV | Canonical deterministic engine + contract validation at the edge |
-| Database | PostgreSQL, Prisma + SQL catalogs | Durable identity/context; versioned food/rule/template data for repeatable plans |
-| Cache | Redis (optional) | Idempotency and cache layers when `USE_REDIS=true` |
-| Assistive AI | Python FastAPI | Isolated LLM/RAG/prakriti/parse with timeouts; failures do not block core pipeline |
-| Observability | Pino, Prometheus `/metrics` | Structured pipeline stage logs and KPI hooks for engineering surfaces |
-| CI | GitHub Actions, `npm run verify` | Lint, build, extended tests, phase-1 suite, golden-path smoke |
+|-------|-----------|-----|
+| Frontend | React 18, Vite, Zustand, TypeScript | Fast iterative UI for onboarding/planner flows with strongly typed client-state boundaries. |
+| Backend | Node.js, Express, AJV | Deterministic orchestration with strict request/response contract validation. |
+| Database | PostgreSQL + Prisma | Durable user/auth/context storage and structured production persistence path. |
+| Cache | Redis (optional) | Optional low-latency cache/idempotency layer when enabled via env. |
+| Assistive AI | Python FastAPI service | Isolates LLM/RAG/parsing workloads so planner determinism is not coupled to AI runtime. |
+| Observability | Pino + Prometheus endpoints | Structured logs and metrics (`/metrics`, `/metrics/prometheus`) for production monitoring. |
 
 ---
 
 ## Features
 
 ### Planning Engine
+- Deterministic meal planning endpoints for single meal, daily, and weekly plans (`/plan`, `/plan/daily`, `/plan/weekly`)
+- Multi-stage selection pipeline: template -> candidates -> constraints -> scoring -> diversity -> optimizer -> reliability
+- Replay and determinism validation routes for regression/debug workflows (`/plan/replay`, `/plan/test-determinism`)
 
-- Single-meal, full-day, and **7-day weekly** orchestration (`/plan`, `/plan/daily`, `/plan/weekly`)
-- Template-driven slots with beam optimizer and deterministic greedy fallback
-- Post-plan **Trace_v1** with per-stage counts, P0 stats, and relaxation level
+### Safety & Contract Enforcement
+- AJV validation for contract versions in `apps/backend/src/contracts/schemas/*.v1.schema.json`
+- Priority-based rule system with strict safety floor behavior
+- Explicit action endpoints with payload validation (`/replace-food`, `/regenerate-meal`)
 
-### Safety & Constraints
+### Adaptive & Assistive Layer
+- User context, adherence, and feedback modules that adjust deterministic scoring inputs
+- AI interpretation/explanation integration through bounded backend services
+- Frontend boundary checks that prevent direct AI decision endpoint usage during build
 
-- Priority-tier rules: reject / penalize with **P0 output compliance** after reliability passes
-- Allergy, diet type, and user-state filters before scoring
-- Controlled vocabulary for symptoms and goals (no silent enum coercion)
-
-### Adaptation & Feedback
-
-- History-aware diversity penalties and preference weights (DB-backed when configured)
-- Adherence and feedback paths feed deterministic re-scoring—not ad-hoc LLM edits
-
-### Assistive & Audit Surfaces
-
-- Knowledge / assistant queries routed via backend (frontend must not call AI for decision fields)
-- Trace and observability pages for engineering transparency (health, metrics, telemetry)
-- Optional AI explanations merged into `DecisionResponse_v1` without changing selection
+### Operations & Monitoring
+- Health and metrics surfaces (`/health`, `/metrics`, `/metrics/prometheus`)
+- Telemetry middleware and metrics recording in API/pipeline paths
+- End-to-end verify script combining lint, build, tests, phase checks, and smoke test
 
 ---
 
 ## System Flow
 
-**Weekly plan journey (primary product flow):**
-
-1. User completes **onboarding** → goals, constraints, prakriti estimate, diet → persisted `UserContext` (JWT session when `JWT_SECRET` is set).
-2. User opens **Planner**, selects **Weekly**, sets calorie cap and preferences → frontend builds `PlanWeeklyRequest_v1`.
-3. **POST `/plan/weekly`** validates request → for each of 7 days, runs breakfast / lunch / dinner through the same deterministic pipeline with rolling exclusions for cross-day diversity.
-4. Backend returns **`PlanWeeklyResponse_v1`**: `weekly_plan[]` (meals, per-day nutrition, score, confidence) plus aggregated **`trace_summary`** (P0 pass/fail, stage totals).
-5. User views cards per day in the UI; optional **Trace** route inspects pipeline evidence; **Knowledge** Q&A uses RAG through backend only.
+1. Client submits a weekly plan request to `POST /plan/weekly` with user constraints and goals.
+2. Backend validates the request contract (`plan-weekly-request.v1`) and normalizes payload through adapters.
+3. For each meal slot/day, orchestrator runs deterministic stages: template selection, candidate generation, constraint filtering, scoring, diversity, and optimization.
+4. Reliability layer applies fallback only when needed while preserving P0 safety constraints.
+5. Backend assembles `plan-weekly-response.v1`, validates response contract, and returns weekly plan plus trace/summary metadata.
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-
-- **Node.js 20+** (CI uses 20; local 18+ may work)
-- **npm** (workspaces at repo root)
-- **PostgreSQL** recommended for full catalog + auth (see `docker compose` below)
-- **Python 3.10+** only if running `apps/ai-service` locally
+- Node.js 20+
+- npm
+- PostgreSQL (recommended for production-grade mode)
+- Optional Redis
+- Environment variables (see `apps/backend/.env.example`)
 
 ### Installation
-
 ```bash
-git clone <repo-url>
+git clone [repo-url]
 cd AYUDIET_FINAL
 npm ci
 ```
 
 ### Environment Setup
-
 ```bash
 cp apps/backend/.env.example apps/backend/.env
-# Set at minimum: CORS_ORIGINS, JWT_SECRET (for auth routes)
-# For full health: DATABASE_URL (see docker-compose credentials in .env.example)
-```
-
-Optional AI service:
-
-```bash
-cp apps/ai-service/.env.example apps/ai-service/.env   # if present
+# Fill required values based on comments in .env.example
 ```
 
 ### Running Locally
-
 ```bash
-# Postgres + Redis (optional)
+# Optional infra
 docker compose up -d
 
-# Backend + frontend (from repo root)
+# Monorepo dev (backend + frontend)
 npm run dev
 ```
 
-- API: `http://localhost:5000` (default)
-- App: `http://localhost:5173` (default)
-
-Detailed ops: [docs/RUNBOOK_LOCAL.md](docs/RUNBOOK_LOCAL.md)
-
 ### Running Tests
-
 ```bash
-# CI parity (lint, build, backend suites, phase-1, golden path)
 npm run verify
-
-# Subsets
-npm run test:all
-npm run test:extended
-npm run golden-path-smoke
 ```
 
 ---
 
 ## API Reference
 
-Non-obvious or contract-heavy endpoints only. Full shapes: [docs/CONTRACTS.md](docs/CONTRACTS.md), [docs/PRD.md](docs/PRD.md).
-
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/plan` | Optional | Single meal; `DecisionRequest_v1` → `DecisionResponse_v1` + trace |
-| POST | `/plan/daily` | Optional | Three meals (breakfast/lunch/dinner) in one response |
-| POST | `/plan/weekly` | Optional | `PlanWeeklyRequest_v1` → 7-day plan + `trace_summary` |
-| POST | `/plan/replay` | Optional | Re-run stored decision input for determinism/debug |
-| POST | `/replace-food` | Context | Swap one item in an existing plan slot with re-validation |
-| POST | `/regenerate-meal` | Context | Regenerate one meal slot under current constraints |
-| POST | `/assistant/query` | Varies | Bounded assistive orchestration (not meal selection) |
-| GET | `/health` | No | DB/LLM/degraded mode signaling for ops |
-| GET | `/metrics/prometheus` | No | Prometheus scrape of pipeline KPIs |
-
-Auth routes (`/auth/signup`, `/auth/login`) and `/user/*` require `JWT_SECRET`.
+| POST | `/plan/weekly` | optional | Runs 7-day deterministic planning pipeline and returns contract-validated weekly response with trace summary. |
+| POST | `/plan/replay` | optional | Replays prior plan input through the same deterministic path for regression/debug consistency checks. |
+| POST | `/replace-food` | context-dependent | Replaces a selected food item in an existing decision path with server-side validation and re-evaluation. |
+| POST | `/regenerate-meal` | context-dependent | Regenerates one meal slot under current constraints using deterministic planner stages. |
+| GET | `/metrics/prometheus` | no | Prometheus-formatted runtime metrics for operational dashboards and alerting. |
 
 ---
 
 ## Known Limitations
 
-- **Degraded catalog without `DATABASE_URL`:** server can start with JSON fallbacks; plans repeat more often and health reports degraded DB.
-- **Weekly diversity vs. small fallback catalog:** strict tests expect unique meals across 7 days; limited food samples can fail diversity assertions even when API returns 200.
-- **Calorie target semantics:** per-meal pipeline runs can produce **high daily totals** when each slot is a full template meal (multi-item), not a single 700 kcal plate.
-- **Recipe-first pipeline is partial:** `AAROGYA_RECIPE_FIRST_PIPELINE` bridges recipes into candidates; optimizer/scoring remain food-shaped until R-01/R-02 complete.
-- **Single-region, single-process assumptions:** in-memory idempotency/window patterns are not distributed; scale-out needs shared Redis/DB coordination.
-- **Wellness product, not clinical software:** no HIPAA/GDPR DPA or diagnostic claims in scope.
+- DB-disabled fallback mode is still executable, but persistence and catalog richness degrade; logs show repeated fallback warnings.
+- Weekly diversity quality depends on catalog breadth, so sparse fallback datasets can increase repetition risk.
+- Current architecture assumes explicit shared-state coordination for fully distributed multi-instance strict consistency.
 
 ---
 
 ## What I Would Do Next
 
-- Enforce **unique `(user_id, week, recipe_id)`** (or meal fingerprint) in weekly planner state to close cross-day repetition on small catalogs.
-- Split **daily calorie budget** from **per-slot `max_calories`** in weekly orchestration so UI targets match aggregated `nutrition_summary`.
-- Add **integration test** for full `PlanWeeklyRequest_v1` → `validatePlanWeeklyResponse` on a seeded Postgres fixture to lock contract + diversity behavior in CI.
-
----
-
-## Documentation
-
-| Doc | Purpose |
-|-----|---------|
-| [docs/PRD.md](docs/PRD.md) | Product requirements, personas, F-01–F-08, release criteria |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System structure and module boundaries |
-| [docs/CONTRACTS.md](docs/CONTRACTS.md) | Versioned schemas and governance |
-| [docs/MASTER_EXECUTION_PLAN.md](docs/MASTER_EXECUTION_PLAN.md) | Phased engineering checklist |
-| [docs/RUNBOOK_LOCAL.md](docs/RUNBOOK_LOCAL.md) | Local dev, migrations, CI parity |
+- Add integration tests that assert `plan-weekly-request.v1 -> plan-weekly-response.v1` validity against seeded PostgreSQL fixtures.
+- Enforce stronger weekly anti-repetition constraints at persistence level (for example unique meal fingerprint policy per user/week window).
+- Add production alert thresholds for sustained fallback-mode events (`db_disabled`, catalog fallback) to fail fast before user-visible quality drift.
 
 ---
 
 ## License
-
-Proprietary — major academic / project repository unless a `LICENSE` file is added by the maintainers.
+Proprietary (no `LICENSE` file is currently present in the repository).

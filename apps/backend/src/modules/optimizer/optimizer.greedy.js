@@ -16,7 +16,7 @@ function toSafeString(value, fallback) {
 
 function getCandidateScore(candidate) {
   const safeCandidate = toSafeObject(candidate);
-  return toSafeNumber(safeCandidate.score, 0);
+  return toSafeNumber(safeCandidate.finalScore, toSafeNumber(safeCandidate.score, 0));
 }
 
 function getCandidatePenalty(candidate) {
@@ -81,8 +81,7 @@ function buildGreedySolution(candidatesByCategory) {
       return selectedItems;
     }
 
-    const sorted = [...candidates].sort(compareCandidates);
-    const winner = sorted[0];
+    const winner = candidates.reduce((best, cur) => (compareCandidates(best, cur) > 0 ? cur : best));
 
     if (winner && typeof winner === "object") {
       selectedItems.push({ ...winner });

@@ -18,11 +18,19 @@ function applyConstraints(template, candidates, userState, rules, options = {}) 
   const categories = Array.from(new Set(extractCategories(template)));
   const topK = toSafeTopK(options.topK);
 
+  // Pre-compute P0 rule count once — consistent across all categories
+  const p0RulesChecked = safeRules.filter((r) => r && r.priority === "P0").length;
+  const p0ViolatedRuleIds = [];
+  let p0Violations = 0;
+
   const stageStats = {
     inputCount: categories.reduce((sum, category) => sum + toSafeArray(safeCandidates[category]).length, 0),
     outputCount: 0,
     rejectedCount: 0,
     reason: "constraint_filtering",
+    p0_rules_checked: p0RulesChecked,
+    p0_violations: 0,
+    p0_violated_rule_ids: [],
   };
 
   const constrained = categories.reduce((acc, category) => {
@@ -38,8 +46,21 @@ function applyConstraints(template, candidates, userState, rules, options = {}) 
     stageStats.rejectedCount += Math.max(0, toSafeArray(filteredResult.rejectedFoods).length)
       + Math.max(0, toSafeArray(filteredResult.validFoods).length - validFoods.length);
 
+    // Aggregate P0 stats from this category's filter result
+    const filterStats = filteredResult.stats || {};
+    p0Violations += filterStats.p0_violations || 0;
+    toSafeArray(filterStats.p0_violated_rule_ids).forEach((id) => {
+      if (id && !p0ViolatedRuleIds.includes(id)) {
+        p0ViolatedRuleIds.push(id);
+      }
+    });
+
     return acc;
   }, {});
+
+  // Finalize aggregated P0 stats
+  stageStats.p0_violations = p0Violations;
+  stageStats.p0_violated_rule_ids = p0ViolatedRuleIds;
 
   Object.defineProperty(constrained, "__stageStats", {
     value: stageStats,

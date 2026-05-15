@@ -1,6 +1,4 @@
-function toSafeString(value, fallback) {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
-}
+const { toSafeString } = require("../utils/safeUtils");
 
 function toNonNegativeNumber(value) {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {

@@ -16,10 +16,15 @@ function envFlag(name, fallback) {
   return fallback;
 }
 
+function recipeFirstPipelineEnabled() {
+  return envFlag("AAROGYA_RECIPE_FIRST_PIPELINE", false);
+}
+
 module.exports = {
   useRAG: envFlag("FF_USE_RAG", true),
   useAdaptiveScoring: envFlag("FF_USE_ADAPTIVE_SCORING", true),
   useAIProfiling: envFlag("FF_USE_AI_PROFILING", true),
   shadowMode: envFlag("FF_SHADOW_MODE", false),
   autoRollbackOnErrorSpike: envFlag("FF_AUTO_ROLLBACK", true),
+  recipeFirstPipelineEnabled,
 };

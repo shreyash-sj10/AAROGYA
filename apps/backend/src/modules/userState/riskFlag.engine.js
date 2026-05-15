@@ -1,9 +1,7 @@
+const { toSafeNumber } = require("../../utils/safeUtils");
+
 function includesValue(list, value) {
   return Array.isArray(list) && list.includes(value);
-}
-
-function toSafeNumber(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 function computeRiskFlags(userState) {

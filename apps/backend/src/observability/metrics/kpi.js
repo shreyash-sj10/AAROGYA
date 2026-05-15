@@ -1,10 +1,7 @@
 const { getSnapshot } = require("./index");
+const { toSafeNumber } = require("../../utils/safeUtils");
 
 const buckets = [];
-
-function toSafeNumber(value, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
 
 function recordKPI(data = {}) {
   const snapshot = getSnapshot();

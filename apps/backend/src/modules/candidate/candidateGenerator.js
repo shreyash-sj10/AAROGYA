@@ -1,7 +1,10 @@
 const { CANDIDATE_CONFIG } = require("../../config/candidate");
-const { normalizeString, toSafeArray } = require("../../utils/normalizeInput");
+const { simulateEmptyCandidates } = require("../../config/devSimulations");
+const FEATURE_FLAGS = require("../../config/featureFlags");
+const { normalizeString, toSafeArray, toSafeNumber, toSafeObject, toSafeString } = require("../../utils/normalizeInput");
 const { extractCategories } = require("../../templates/mealTemplate.service");
-const { getValidRecipes } = require("../recipe/recipe.service");
+const { upsertSyntheticRecipesFromFoods } = require("../recipe/recipe.repository");
+const { getValidRecipesSync } = require("../recipe/recipe.service");
 const { applyRules } = require("../../rules/engine/constraintEngine");
 
 function toSafeTopK(value) {
@@ -13,9 +16,10 @@ function toSafeTopK(value) {
 }
 
 function isVegetarianAllowed(userState, food) {
-  const diet = normalizeString(userState && (userState.diet || userState.diet_type));
+  const dietRaw = normalizeString(userState && (userState.diet || userState.diet_type));
+  const diet = dietRaw === "veg" ? "vegetarian" : dietRaw;
 
-  if (diet !== "veg") {
+  if (diet !== "vegetarian" && diet !== "vegan") {
     return true;
   }
 
@@ -48,8 +52,23 @@ function isAllergySafe(userState, food) {
   ));
 }
 
+function isExcluded(userState, food) {
+  const exclusions = toSafeArray(userState && userState.exclusions)
+    .map(normalizeString)
+    .filter(Boolean);
+
+  if (exclusions.length === 0) {
+    return false;
+  }
+
+  const foodName = normalizeString(food && food.name);
+  const foodId = normalizeString(food && food.id);
+  const foodRecipeId = normalizeString(food && food.recipe_id);
+
+  return exclusions.includes(foodName) || exclusions.includes(foodId) || exclusions.includes(foodRecipeId);
+}
 function applyPreFilters(foods, userState) {
-  return toSafeArray(foods).filter((food) => isVegetarianAllowed(userState, food) && isAllergySafe(userState, food));
+  return toSafeArray(foods).filter((food) => isVegetarianAllowed(userState, food) && isAllergySafe(userState, food) && !isExcluded(userState, food));
 }
 
 function getDigestibilityScore(food) {
@@ -143,11 +162,153 @@ function evaluateFoodWithRules(food, userState, rules) {
   };
 }
 
+function buildFoodsMapFromList(foods) {
+  return toSafeArray(foods).reduce((acc, food) => {
+    const safe = toSafeObject(food);
+    const id = toSafeString(safe.id, "");
+    if (id) {
+      acc[id] = safe;
+    }
+    return acc;
+  }, {});
+}
+
+function gramsFromAggregateIngredient(ingredient) {
+  const safe = toSafeObject(ingredient);
+  const q = toSafeObject(safe.quantity);
+  const unit = normalizeString(q.unit);
+  if (unit === "grams" && typeof q.value === "number" && Number.isFinite(q.value)) {
+    return q.value;
+  }
+  return 0;
+}
+
+function synthesizeDoshaEffectFromAggregate(aggregate, foodsMap) {
+  const safeMap = foodsMap && typeof foodsMap === "object" ? foodsMap : {};
+  let totalGrams = 0;
+  const sum = { vata: 0, pitta: 0, kapha: 0 };
+
+  toSafeArray(aggregate && aggregate.ingredients).forEach((ing) => {
+    const fid = toSafeString(toSafeObject(ing).food_id, "");
+    const g = gramsFromAggregateIngredient(ing);
+    const food = toSafeObject(safeMap[fid]);
+    if (!food || g <= 0) {
+      return;
+    }
+    const d = toSafeObject(food.dosha_effect);
+    totalGrams += g;
+    sum.vata += toSafeNumber(d.vata, 0) * g;
+    sum.pitta += toSafeNumber(d.pitta, 0) * g;
+    sum.kapha += toSafeNumber(d.kapha, 0) * g;
+  });
+
+  if (totalGrams <= 0) {
+    const de = toSafeObject(toSafeObject(aggregate && aggregate.aggregates).dosha_estimate);
+    return {
+      vata: toSafeNumber(de.vata, 0),
+      pitta: toSafeNumber(de.pitta, 0),
+      kapha: toSafeNumber(de.kapha, 0),
+    };
+  }
+
+  return {
+    vata: sum.vata / totalGrams,
+    pitta: sum.pitta / totalGrams,
+    kapha: sum.kapha / totalGrams,
+  };
+}
+
+function recipeAggregateToFoodCandidate(aggregate, foodsMap, slotCategory) {
+  const agg = aggregate && typeof aggregate === "object" ? aggregate : {};
+  const aggregates = toSafeObject(agg.aggregates);
+  const nutr = toSafeObject(aggregates.nutrition);
+  const func = toSafeObject(aggregates.functional);
+  const safeMap = foodsMap && typeof foodsMap === "object" ? foodsMap : {};
+  const allergenSet = new Set();
+  const tagSet = new Set();
+  let allergyTag = "";
+  let allVegetarian = true;
+
+  toSafeArray(agg.ingredients).forEach((ing) => {
+    const fid = toSafeString(toSafeObject(ing).food_id, "");
+    const food = toSafeObject(safeMap[fid]);
+    toSafeArray(food.allergens).forEach((a) => {
+      const s = normalizeString(a);
+      if (s) {
+        allergenSet.add(s);
+      }
+    });
+    toSafeArray(food.tags).forEach((t) => {
+      const s = normalizeString(t);
+      if (s) {
+        tagSet.add(s);
+      }
+    });
+    const meta = toSafeObject(food.meta);
+    if (typeof meta.allergy_tag === "string" && meta.allergy_tag.trim() && !allergyTag) {
+      allergyTag = meta.allergy_tag.trim();
+    }
+    if (meta.is_vegetarian === false) {
+      allVegetarian = false;
+    }
+  });
+
+  const recipeId = toSafeString(agg.recipe_id, "");
+  const name = typeof agg.name === "string" && agg.name.trim() ? agg.name.trim() : recipeId;
+
+  const metaOut = { is_vegetarian: allVegetarian };
+  if (allergyTag) {
+    metaOut.allergy_tag = allergyTag;
+  }
+
+  return {
+    id: recipeId,
+    recipe_id: recipeId,
+    name,
+    category: slotCategory,
+    nutrition: {
+      calories: toSafeNumber(nutr.calories, 0),
+      protein: toSafeNumber(nutr.protein, 0),
+      carbs: toSafeNumber(nutr.carbs, 0),
+      fat: toSafeNumber(nutr.fat, 0),
+      glycemic_index: toSafeNumber(nutr.glycemic_index, 0),
+    },
+    dosha_effect: synthesizeDoshaEffectFromAggregate(agg, safeMap),
+    functional: {
+      digestibility_score: toSafeNumber(func.digestibility_score, 0),
+      heaviness_score: toSafeNumber(func.heaviness_score, 0),
+    },
+    meta: metaOut,
+    allergens: Array.from(allergenSet),
+    tags: Array.from(tagSet),
+    recipe_aggregate: agg,
+  };
+}
+
 function generateCandidates(template, foods, userState, rules, options) {
   const safeFoods = toSafeArray(foods);
   const safeOptions = options && typeof options === "object" ? options : {};
   const topK = toSafeTopK(safeOptions.topK);
   const categories = Array.from(new Set(extractCategories(template)));
+
+  if (simulateEmptyCandidates()) {
+    const emptyMap = categories.reduce((acc, category) => {
+      acc[category] = [];
+      return acc;
+    }, {});
+    const stageStats = {
+      inputCount: safeFoods.length,
+      outputCount: 0,
+      rejectedCount: safeFoods.length,
+      reason: "SIMULATE_EMPTY_CANDIDATES",
+    };
+    Object.defineProperty(emptyMap, "__stageStats", {
+      value: stageStats,
+      enumerable: false,
+      writable: false,
+    });
+    return emptyMap;
+  }
 
   const stageStats = {
     inputCount: safeFoods.length,
@@ -156,8 +317,30 @@ function generateCandidates(template, foods, userState, rules, options) {
     reason: "candidate_prefilter",
   };
 
+  if (FEATURE_FLAGS.recipeFirstPipelineEnabled()) {
+    upsertSyntheticRecipesFromFoods(safeFoods);
+  }
+
+  const foodsMapForRecipes = buildFoodsMapFromList(safeFoods);
+
   const candidateMap = categories.reduce((acc, category) => {
-    const categoryFoods = safeFoods.filter((food) => food && food.category === category);
+    let categoryFoods = safeFoods.filter((food) => food && food.category === category);
+
+    if (FEATURE_FLAGS.recipeFirstPipelineEnabled()) {
+      const aggregates = getValidRecipesSync({
+        category,
+        foods: safeFoods,
+        userState,
+      });
+      if (aggregates.length > 0) {
+        categoryFoods = aggregates.map((aggregate) => recipeAggregateToFoodCandidate(
+          aggregate,
+          foodsMapForRecipes,
+          category
+        ));
+      }
+    }
+
     const preFilteredFoods = applyPreFilters(categoryFoods, userState);
     const ruleEvaluatedFoods = preFilteredFoods
       .map((food) => evaluateFoodWithRules(food, userState, rules))
@@ -184,9 +367,8 @@ function generateCandidates(template, foods, userState, rules, options) {
   return candidateMap;
 }
 
-async function generateRecipeCandidates(context) {
-  const recipes = await getValidRecipes(context);
-  return toSafeArray(recipes);
+function generateRecipeCandidates(context) {
+  return getValidRecipesSync(context);
 }
 
 module.exports = {
@@ -197,3 +379,6 @@ module.exports = {
   generateCandidates,
   generateRecipeCandidates,
 };
+
+
+

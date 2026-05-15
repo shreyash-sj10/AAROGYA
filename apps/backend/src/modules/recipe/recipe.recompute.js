@@ -1,18 +1,4 @@
-function toSafeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function toSafeObject(value) {
-  return value && typeof value === "object" ? value : {};
-}
-
-function toSafeString(value) {
-  return typeof value === "string" ? value : "";
-}
-
-function toSafeNumber(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+const { toSafeObject, toSafeString, toSafeNumber, toSafeArray } = require("../../utils/safeUtils");
 
 function canonicalNutrition(nutrition) {
   const safeNutrition = toSafeObject(nutrition);

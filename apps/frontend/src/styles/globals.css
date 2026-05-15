@@ -5,36 +5,53 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
-  --bg: #0b0f14;
-  --surface: #121821;
-  --card: #1a2330;
-  --border: #2a3441;
-  --text-primary: #e6edf3;
-  --text-secondary: #9fb0c3;
-  --text-muted: #6b7c8f;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --info: #3b82f6;
-  --accent: #4f46e5;
-  --trace-neutral: #94a3b8;
+  color-scheme: light;
+  --eng-bg: #f4f6f9;
+  --eng-surface: #ffffff;
+  --eng-border: #e2e8f0;
+  --eng-text: #0f172a;
+  --eng-muted: #64748b;
+  --eng-accent: #4f46e5;
+  /* Personalized plan palette (planner + app shell) */
+  --plan-bg: #f5f1e8;
+  --plan-bg-soft: #fbf8f2;
+  --plan-surface: #ffffff;
+  --plan-border: #e6e1d8;
+  --plan-border-strong: #e6d9c6;
+  --plan-text: #2f2f2f;
+  --plan-muted: #675a43;
+  --plan-label: #8e7a56;
+  --plan-accent: #7a6f4b;
+  --plan-accent-hover: #6b6146;
+  --plan-chip-bg: #f8f2e7;
+  --plan-chip-border: #d2c4aa;
+  --plan-btn-secondary-bg: #f9f4ea;
+  --plan-btn-secondary-border: #d7c9af;
+  --plan-shadow: 0 10px 28px rgba(80, 58, 20, 0.08);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html,
 body,
 #root {
   min-height: 100%;
+  min-height: 100dvh;
 }
 
 body {
   margin: 0;
-  background-color: var(--bg);
-  color: var(--text-primary);
+  overflow-x: hidden;
+  background-color: var(--plan-bg);
+  color: var(--plan-text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
   font-size: 14px;
   line-height: 1.5;
@@ -44,7 +61,102 @@ body {
 }
 
 code,
-pre {
+pre,
+.font-mono {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ui-fade-in {
+  animation: fadeInUp 220ms ease-out both;
+}
+
+.ui-fade-in-delay {
+  animation: fadeInUp 320ms ease-out both;
+}
+
+.ui-chat-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.ui-chat-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ui-chat-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 999px;
+}
+
+.ui-chat-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.eng-panel {
+  @apply rounded-lg border border-slate-200 bg-white shadow-sm ring-1 ring-slate-900/[0.04];
+}
+
+.eng-btn-primary {
+  @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
+  background-color: var(--plan-accent);
+}
+
+.eng-btn-primary:hover:not(:disabled) {
+  background-color: var(--plan-accent-hover);
+}
+
+.eng-btn-secondary {
+  @apply rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.plan-panel {
+  @apply min-w-0 rounded-2xl border border-[color:var(--plan-border)] bg-[color:var(--plan-surface)] shadow-sm;
+  box-shadow: var(--plan-shadow);
+}
+
+.plan-header {
+  @apply rounded-3xl border border-[color:var(--plan-border-strong)] p-5 sm:p-6;
+  background: linear-gradient(120deg, var(--plan-bg) 0%, #ece2d2 100%);
+  box-shadow: var(--plan-shadow);
+}
+
+.plan-btn-primary {
+  @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60;
+  background-color: var(--plan-accent);
+}
+
+.plan-btn-primary:hover:not(:disabled) {
+  background-color: var(--plan-accent-hover);
+}
+
+.plan-btn-secondary {
+  @apply inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60;
+  border-color: var(--plan-btn-secondary-border);
+  background-color: var(--plan-btn-secondary-bg);
+  color: #5a503c;
+}
+
+.plan-btn-secondary:hover:not(:disabled) {
+  background-color: #f4ecde;
+}
+
+.app-shell-main {
+  @apply min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 sm:p-4 md:p-6;
+}
+
+.safe-text {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

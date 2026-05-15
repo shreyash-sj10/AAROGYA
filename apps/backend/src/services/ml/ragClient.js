@@ -1,39 +1,104 @@
 const crypto = require("crypto");
 const FEATURE_FLAGS = require("../../config/featureFlags");
 const cache = require("../cache/cache.service");
-const { logError } = require("../../observability/logger");
 const { recordError } = require("../../observability/metrics");
 
-const RAG_URL = process.env.AYUDIET_RAG_URL || "http://localhost:8000/rag/explain";
-const TIMEOUT_MS = 3000;
-const MAX_RETRIES = 1;
+const DEFAULT_AI_SERVICE_URL = "https://aarogya-llm-model.onrender.com";
+const TIMEOUT_MS = Number(process.env.AAROGYA_RAG_TIMEOUT_MS || 5000);
+const MAX_RETRIES = Number(process.env.AAROGYA_RAG_RETRIES || 1);
 
 function toSafeString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function reportRAGFailure(message, error, extra = {}) {
-  const errMessage = error instanceof Error ? error.message : String(error || "unknown");
-  const safeExtra = extra && typeof extra === "object" ? extra : {};
+function toSafeObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
 
-  logError({
-    error_type: "AI_FAILURE",
-    message: `${message}: ${errMessage}`,
-  });
+function toSafeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function trimSlash(value) {
+  return toSafeString(value).replace(/\/+$/, "");
+}
+
+function resolveRagUrl() {
+  const explicit = trimSlash(process.env.AAROGYA_RAG_URL || "");
+  if (explicit) {
+    return explicit.endsWith("/ai/rag") ? explicit : `${explicit}/ai/rag`;
+  }
+
+  const base = trimSlash(process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL);
+  return `${base}/ai/rag`;
+}
+
+const RAG_URL = resolveRagUrl();
+
+function reportRAGWarning(message, error, extra = {}) {
+  const errMessage = error instanceof Error ? error.message : String(error || "unknown");
+  console.warn(`[rag] ${message}: ${errMessage}`);
   recordError("AI_FAILURE");
+  return { ...toSafeObject(extra), error: errMessage };
+}
+
+function assertValidRagPayload(payload) {
+  const safe = toSafeObject(payload);
+  const query = toSafeString(safe.query);
+  const sessionId = toSafeString(safe.session_id);
+  const context = toSafeObject(safe.context);
+
+  if (!query || !sessionId || Object.keys(context).length === 0) {
+    const error = new Error("INVALID_RAG_PAYLOAD");
+    error.name = "InvalidRagPayloadError";
+    throw error;
+  }
 
   return {
-    ...safeExtra,
-    error: errMessage,
+    query,
+    session_id: sessionId,
+    context,
+    retrieved_documents: toSafeObject(safe.retrieved_documents),
   };
+}
+
+function normalizeSources(rawSources) {
+  return toSafeArray(rawSources)
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({
+      text_id: toSafeString(item.text_id),
+      source: toSafeString(item.source),
+      chapter: toSafeString(item.chapter),
+    }))
+    .filter((item) => item.text_id && item.source);
+}
+
+function normalizeEnvelope(parsed) {
+  const safe = toSafeObject(parsed);
+  const data = toSafeObject(safe.data);
+  const meta = toSafeObject(safe.meta);
+
+  return {
+    explanation: toSafeString(data.explanation || safe.explanation),
+    sources: normalizeSources(data.sources || safe.sources),
+    meta: {
+      fallback: Boolean(meta.fallback || safe.fallback_used),
+      reason: toSafeString(meta.reason || safe.reason || "ok") || "ok",
+      mode: toSafeString(meta.mode || "normal") || "normal",
+    },
+  };
+}
+
+function buildCacheKey(payload) {
+  return `rag:${crypto.createHash("sha1").update(JSON.stringify(payload)).digest("hex")}`;
 }
 
 async function fetchWithTimeout(body) {
   let lastError = null;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+  for (let attempt = 0; attempt <= Math.max(0, MAX_RETRIES); attempt += 1) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), Math.max(500, TIMEOUT_MS));
 
     try {
       const response = await fetch(RAG_URL, {
@@ -44,38 +109,26 @@ async function fetchWithTimeout(body) {
       });
 
       if (!response.ok) {
-        lastError = new Error(`RAG HTTP ${response.status}`);
-        reportRAGFailure("RAG request returned non-OK status", lastError, { attempt });
+        lastError = new Error(`RAG_HTTP_${response.status}`);
         continue;
       }
 
       const parsed = await response.json();
-      if (parsed && typeof parsed === "object") {
-        return parsed;
-      }
-
-      lastError = new Error("RAG response is not an object");
-      reportRAGFailure("RAG response shape invalid", lastError, { attempt });
+      return normalizeEnvelope(parsed);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error || "unknown"));
-      reportRAGFailure("RAG fetch attempt failed", lastError, { attempt });
+      reportRAGWarning("RAG fetch attempt failed", lastError, { attempt, rag_url: RAG_URL });
     } finally {
       clearTimeout(timeout);
     }
   }
 
-  throw (lastError || new Error("RAG request failed"));
+  throw (lastError || new Error("RAG_REQUEST_FAILED"));
 }
 
-async function getRAGExplanation(query) {
-  const safeQuery = toSafeString(query);
-
-  if (!FEATURE_FLAGS.useRAG || !safeQuery) {
-    return null;
-  }
-
-  const queryHash = crypto.createHash("sha1").update(safeQuery).digest("hex");
-  const key = `rag:${queryHash}`;
+async function getRAGExplanation(input) {
+  const payload = assertValidRagPayload(input);
+  const key = buildCacheKey(payload);
 
   try {
     const cached = cache.get(key, { optional: true });
@@ -83,43 +136,41 @@ async function getRAGExplanation(query) {
       return cached;
     }
   } catch (error) {
-    reportRAGFailure("RAG cache read failed", error, { key });
+    reportRAGWarning("RAG cache read failed", error, { key });
   }
 
-  let parsed = null;
-  try {
-    parsed = await fetchWithTimeout({ query: safeQuery });
-  } catch (error) {
-    reportRAGFailure("RAG fetch exhausted retries", error, { query_hash: queryHash });
-    return null;
+  let result;
+
+  if (FEATURE_FLAGS.useRAG) {
+    try {
+      result = await fetchWithTimeout(payload);
+    } catch (error) {
+      result = {
+        explanation: "",
+        sources: [],
+        meta: {
+          fallback: true,
+          reason: error instanceof Error && /abort|timeout/i.test(error.message) ? "timeout" : "error",
+          mode: "fallback",
+        },
+      };
+    }
+  } else {
+    result = {
+      explanation: "",
+      sources: [],
+      meta: {
+        fallback: true,
+        reason: "rag_disabled",
+        mode: "fallback",
+      },
+    };
   }
-
-  const explanation = toSafeString(parsed.explanation);
-  const sources = Array.isArray(parsed.sources)
-    ? parsed.sources
-      .filter((item) => item && typeof item === "object")
-      .map((item) => ({
-        text_id: typeof item.text_id === "string" ? item.text_id.trim() : "",
-        source: typeof item.source === "string" ? item.source.trim() : "",
-        chapter: typeof item.chapter === "string" ? item.chapter.trim() : "",
-      }))
-      .filter((item) => item.text_id && item.source)
-    : [];
-
-  if (!explanation) {
-    reportRAGFailure("RAG explanation missing", new Error("empty_explanation"), { query_hash: queryHash });
-    return null;
-  }
-
-  const result = {
-    explanation,
-    sources,
-  };
 
   try {
     cache.set(key, result);
   } catch (error) {
-    reportRAGFailure("RAG cache write failed", error, { key });
+    reportRAGWarning("RAG cache write failed", error, { key });
   }
 
   return result;

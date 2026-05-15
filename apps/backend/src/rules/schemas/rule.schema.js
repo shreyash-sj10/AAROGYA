@@ -1,7 +1,7 @@
 const schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
-  $id: "https://ayudiet.local/schemas/rule.schema.json",
-  title: "AYUDIET Rule Schema",
+  $id: "https://aarogya.local/schemas/rule.schema.json",
+  title: "AAROGYA Rule Schema",
   type: "object",
   additionalProperties: false,
   required: ["id", "name", "priority", "logic_tree", "action"],

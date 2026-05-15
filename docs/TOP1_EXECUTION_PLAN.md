@@ -1,4 +1,4 @@
-# Top 1 Percent Execution Plan (AYUDIET)
+# Top 1 Percent Execution Plan (AAROGYA)
 
 ## Verdict on Current Roadmap
 Your phase direction is correct. The missing part is strict acceptance gates tied to code paths and tests.

@@ -1,8 +1,5 @@
 const QUANTITY_CONFIG = require("../../config/quantity");
-
-function toSafeNumber(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+const { toSafeNumber } = require("../../utils/safeUtils");
 
 function normalizeMealType(context) {
   if (!context || typeof context !== "object") {

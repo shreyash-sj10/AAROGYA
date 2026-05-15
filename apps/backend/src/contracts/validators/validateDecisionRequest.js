@@ -1,5 +1,5 @@
-const { validators } = require("../index");
+const { validateDecisionRequest } = require("./index");
 
 module.exports = {
-  validateDecisionRequest: validators.validateDecisionRequest,
+  validateDecisionRequest,
 };

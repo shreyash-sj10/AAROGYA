@@ -1,4 +1,7 @@
-const MAX_LATENCY_SAMPLES = Math.max(10, Number(process.env.AYUDIET_METRICS_LATENCY_SAMPLE_CAP || 1000));
+const { toSafeNumber, toSafeString } = require("../../utils/safeUtils");
+
+const MAX_LATENCY_SAMPLES = Math.max(10, Number(process.env.AAROGYA_METRICS_LATENCY_SAMPLE_CAP || 1000));
+const MAX_TREND_POINTS = Math.max(10, Number(process.env.AAROGYA_METRICS_TREND_CAP || 200));
 
 const counters = {
   api_request_count: 0,
@@ -29,6 +32,9 @@ const counters = {
     candidate_count: 0,
     used_fallback: false,
     confidence_level: "low",
+    p0_violations: 0,
+    relaxation_level: 0,
+    fallback_reason: "",
   },
   latency_samples: [],
   ai: {
@@ -51,15 +57,22 @@ const counters = {
     compared_count: 0,
     mismatch_count: 0,
   },
+  trends: {
+    score: [],
+    confidence: [],
+    fallback_rate: [],
+  },
+  adherence_events: [],
+  engine: {
+    p0_violation_plans_total: 0,
+    relaxation_level_sum: 0,
+    relaxation_samples: 0,
+  },
+  optimizer_search: {
+    beam_layer_expansions_total: 0,
+    beam_prune_events_total: 0,
+  },
 };
-
-function toSafeNumber(value, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function toSafeString(value, fallback = "") {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
-}
 
 function clampLevel(value) {
   if (value === "low" || value === "medium" || value === "high") {
@@ -100,6 +113,13 @@ function pushLatencySample(latencyMs) {
   counters.latency_samples.push(Math.max(0, toSafeNumber(latencyMs, 0)));
   if (counters.latency_samples.length > MAX_LATENCY_SAMPLES) {
     counters.latency_samples.shift();
+  }
+}
+
+function pushTrendSample(collection, point) {
+  collection.push(point);
+  if (collection.length > MAX_TREND_POINTS) {
+    collection.shift();
   }
 }
 
@@ -162,7 +182,19 @@ function recordApiError() {
   counters.api_error_count += 1;
 }
 
-function recordRequest({ latency_ms, pipeline_ms, optimizer_ms, candidate_count, usedFallback, confidenceLevel } = {}) {
+function recordRequest({
+  latency_ms,
+  pipeline_ms,
+  optimizer_ms,
+  candidate_count,
+  usedFallback,
+  confidenceLevel,
+  score,
+  confidenceValue,
+  p0_violations,
+  relaxation_level,
+  fallback_reason,
+} = {}) {
   const safeLatency = Math.max(0, toSafeNumber(latency_ms, 0));
   const safePipeline = Math.max(0, toSafeNumber(pipeline_ms, 0));
   const safeOptimizer = Math.max(0, toSafeNumber(optimizer_ms, 0));
@@ -182,6 +214,10 @@ function recordRequest({ latency_ms, pipeline_ms, optimizer_ms, candidate_count,
   }
 
   counters.confidence_distribution[level] += 1;
+  const p0v = Math.max(0, Math.trunc(toSafeNumber(p0_violations, 0)));
+  const relax = Math.max(0, Math.trunc(toSafeNumber(relaxation_level, 0)));
+  const fbReason = toSafeString(fallback_reason, "");
+
   counters.last_request = {
     latency_ms: safeLatency,
     pipeline_ms: safePipeline,
@@ -189,7 +225,31 @@ function recordRequest({ latency_ms, pipeline_ms, optimizer_ms, candidate_count,
     candidate_count: safeCandidateCount,
     used_fallback: Boolean(usedFallback),
     confidence_level: level,
+    p0_violations: p0v,
+    relaxation_level: relax,
+    fallback_reason: fbReason,
   };
+
+  counters.engine.relaxation_samples += 1;
+  counters.engine.relaxation_level_sum += relax;
+  if (p0v > 0) {
+    counters.engine.p0_violation_plans_total += 1;
+  }
+
+  const timestamp = Date.now();
+  const apiRequestCount = counters.api_request_count;
+  pushTrendSample(counters.trends.score, {
+    timestamp,
+    value: clampRate(score),
+  });
+  pushTrendSample(counters.trends.confidence, {
+    timestamp,
+    value: clampRate(confidenceValue),
+  });
+  pushTrendSample(counters.trends.fallback_rate, {
+    timestamp,
+    value: apiRequestCount > 0 ? clampRate(counters.ai_fallback_count / apiRequestCount) : 0,
+  });
 }
 
 function recordError(errorType = "SYSTEM_ERROR") {
@@ -214,7 +274,7 @@ function recordAIResponse(latencyMs = 0) {
 }
 
 function recordAIValidation(valid) {
-  if (Boolean(valid)) {
+  if (valid) {
     counters.ai.schema_valid_count += 1;
     return;
   }
@@ -224,6 +284,11 @@ function recordAIValidation(valid) {
 
 function recordAIFallback() {
   counters.ai.fallback_count += 1;
+}
+
+function recordOptimizerSearch({ beam_layer_expansions = 0, beam_prune_events = 0 } = {}) {
+  counters.optimizer_search.beam_layer_expansions_total += Math.max(0, Math.trunc(toSafeNumber(beam_layer_expansions, 0)));
+  counters.optimizer_search.beam_prune_events_total += Math.max(0, Math.trunc(toSafeNumber(beam_prune_events, 0)));
 }
 
 function recordAIDisagreement({ ai_suggestion, final_decision } = {}) {
@@ -238,6 +303,42 @@ function recordAIDisagreement({ ai_suggestion, final_decision } = {}) {
   if (aiDecision !== finalDecision) {
     counters.ai_disagreement.mismatch_count += 1;
   }
+}
+
+function recordAdherenceEvent({ user_id, week_id, adherence_score, stats } = {}) {
+  const safeUserId = toSafeString(user_id, "anonymous");
+  const safeWeekId = toSafeString(week_id, "");
+  const safeScore = clampRate(adherence_score);
+
+  const event = {
+    timestamp: Date.now(),
+    user_id: safeUserId,
+    week_id: safeWeekId,
+    adherence_score: safeScore,
+    stats: stats && typeof stats === "object" ? { ...stats } : {},
+  };
+
+  pushTrendSample(counters.adherence_events, event);
+}
+
+function getRecentTrend(points, limit = 5) {
+  return points
+    .slice(-Math.max(1, Math.trunc(toSafeNumber(limit, 5))))
+    .map((point) => ({
+      timestamp: point.timestamp,
+      value: point.value,
+    }));
+}
+
+function getRecentAdherence(userId, limit = 10) {
+  const safeUserId = toSafeString(userId, "");
+  const filtered = safeUserId
+    ? counters.adherence_events.filter((event) => event.user_id === safeUserId)
+    : counters.adherence_events;
+
+  return filtered
+    .slice(-Math.max(1, Math.trunc(toSafeNumber(limit, 10))))
+    .map((event) => ({ ...event }));
 }
 
 function getSnapshot() {
@@ -264,6 +365,14 @@ function getSnapshot() {
     avg_optimizer_ms: buildAverage(counters.total_optimizer_time, requestCount),
     avg_candidate_count: buildAverage(counters.total_candidate_count, requestCount),
     fallback_rate: fallbackRate,
+    engine_health: {
+      p0_violation_plans_total: counters.engine.p0_violation_plans_total,
+      avg_relaxation_level: buildAverage(counters.engine.relaxation_level_sum, counters.engine.relaxation_samples),
+      relaxation_samples: counters.engine.relaxation_samples,
+      p0_trace_flag_rate: requestCount > 0
+        ? clampRate(counters.engine.p0_violation_plans_total / requestCount)
+        : 0,
+    },
     totals: {
       pipeline_ms: Number(counters.total_pipeline_time.toFixed(3)),
       optimizer_ms: Number(counters.total_optimizer_time.toFixed(3)),
@@ -292,6 +401,24 @@ function getSnapshot() {
         ? Number((counters.ai_disagreement.mismatch_count / counters.ai_disagreement.compared_count).toFixed(6))
         : 0,
     },
+    optimizer_search: {
+      beam_layer_expansions_total: counters.optimizer_search.beam_layer_expansions_total,
+      beam_prune_events_total: counters.optimizer_search.beam_prune_events_total,
+    },
+  };
+}
+
+function getDashboardTelemetry({ user_id, trend_limit = 5 } = {}) {
+  const safeLimit = Math.max(1, Math.trunc(toSafeNumber(trend_limit, 5)));
+  const snapshot = getSnapshot();
+
+  return {
+    generated_at: Date.now(),
+    fallback_rate: snapshot.fallback_rate,
+    score_trend: getRecentTrend(counters.trends.score, safeLimit),
+    confidence_trend: getRecentTrend(counters.trends.confidence, safeLimit),
+    fallback_rate_trend: getRecentTrend(counters.trends.fallback_rate, safeLimit),
+    adherence_history: getRecentAdherence(user_id, 10),
   };
 }
 
@@ -324,6 +451,18 @@ function resetMetrics() {
     candidate_count: 0,
     used_fallback: false,
     confidence_level: "low",
+    p0_violations: 0,
+    relaxation_level: 0,
+    fallback_reason: "",
+  };
+  counters.engine = {
+    p0_violation_plans_total: 0,
+    relaxation_level_sum: 0,
+    relaxation_samples: 0,
+  };
+  counters.optimizer_search = {
+    beam_layer_expansions_total: 0,
+    beam_prune_events_total: 0,
   };
   counters.latency_samples = [];
   counters.ai = {
@@ -346,6 +485,12 @@ function resetMetrics() {
     compared_count: 0,
     mismatch_count: 0,
   };
+  counters.trends = {
+    score: [],
+    confidence: [],
+    fallback_rate: [],
+  };
+  counters.adherence_events = [];
 }
 
 module.exports = {
@@ -357,9 +502,11 @@ module.exports = {
   recordAIResponse,
   recordAIValidation,
   recordAIFallback,
+  recordOptimizerSearch,
   recordAIDisagreement,
+  recordAdherenceEvent,
   percentile,
   getSnapshot,
+  getDashboardTelemetry,
   resetMetrics,
 };
-

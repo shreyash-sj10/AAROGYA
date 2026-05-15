@@ -82,7 +82,8 @@ function buildRequest() {
 }
 
 function canonicalize(body) {
-  const safe = JSON.parse(JSON.stringify(body || {}));
+  const outer = JSON.parse(JSON.stringify(body || {}));
+  const safe = outer.data && typeof outer.data === "object" ? outer.data : outer;
   if (safe && safe.meta) {
     safe.meta.cache_hit = false;
     safe.meta.served_latency_ms = 0;
@@ -150,8 +151,9 @@ function canonicalize(body) {
           trace_id: "idem_trace_1",
           timestamp: 1711929600,
           stages: {
+            interpretation_layer: { ml_used: false, ml_confidence: 0, ml_contribution_weight: 0 },
             candidate_generator: { input_count: 0, output_count: 1 },
-            constraint_engine: { input_count: 1, output_count: 1, rejected: 0, rules: [] },
+            constraint_engine: { input_count: 1, output_count: 1, rejected: 0, rules: [], p0_rules_checked: 0, p0_violations: 0, p0_violated_rule_ids: [] },
             scoring_engine: { input_count: 1, output_count: 1 },
             diversity_engine: { input_count: 1, output_count: 1 },
             optimizer: { input_count: 1, output_count: 1, combinations_evaluated: 1, selected_score: 0.7 },
@@ -159,6 +161,8 @@ function canonicalize(body) {
           },
         },
         explanation: { deterministic: "ok", ai_explanation: "", citations: [] },
+        insights: [],
+        warnings: [],
         meta: {
           latency_ms: 1,
           cache_hit: false,
@@ -183,8 +187,9 @@ function canonicalize(body) {
 
   assert(resA.statusCode === 200 && resB.statusCode === 200, "idempotent plan responses must return 200");
   assert(generateCount === 1, "duplicate request should execute generator exactly once");
-  assert(resB.body && resB.body.meta && resB.body.meta.cache_hit === true, "cache hit response must set meta.cache_hit=true");
-  assert(JSON.stringify(canonicalize(resA.body)) === JSON.stringify(canonicalize(resB.body)), "cached response should remain contract-equivalent");
+  const resBData = resB.body && resB.body.data ? resB.body.data : resB.body;
+  assert(resBData && resBData.meta && resBData.meta.cache_hit === true, "cache hit response must set meta.cache_hit=true");
+  assert(JSON.stringify(canonicalize(resA.body && resA.body.data ? resA.body.data : resA.body)) === JSON.stringify(canonicalize(resBData)), "cached response should remain contract-equivalent");
 
   const healthRes = createMockRes();
   await executeHandlers(routes["/health"], { body: {} }, healthRes);
@@ -202,4 +207,6 @@ function canonicalize(body) {
 
   console.log("PASS: idempotency caching works and ops trace policy is enforced");
 })();
+
+
 

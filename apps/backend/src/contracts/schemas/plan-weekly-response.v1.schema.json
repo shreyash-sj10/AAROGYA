@@ -1,0 +1,208 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "PlanWeeklyResponse_v1",
+  "title": "PlanWeeklyResponse_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "weekly_plan",
+    "trace_summary"
+  ],
+  "properties": {
+    "weekly_plan": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "day",
+          "meal_plan",
+          "nutrition_summary",
+          "score",
+          "confidence"
+        ],
+        "properties": {
+          "day": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7
+          },
+          "meal_plan": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "recipe_id",
+                "name",
+                "quantity"
+              ],
+              "properties": {
+                "recipe_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "quantity": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "value",
+                    "unit"
+                  ],
+                  "properties": {
+                    "value": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "unit": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "nutrition": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "calories",
+                    "protein",
+                    "carbs",
+                    "fat"
+                  ],
+                  "properties": {
+                    "calories": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "protein": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "carbs": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "fat": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "nutrition_summary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "calories",
+              "protein",
+              "carbs",
+              "fat"
+            ],
+            "properties": {
+              "calories": {
+                "type": "number",
+                "minimum": 0
+              },
+              "protein": {
+                "type": "number",
+                "minimum": 0
+              },
+              "carbs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "fat": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    "trace_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "days",
+        "stages"
+      ],
+      "properties": {
+        "days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        },
+        "stages": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "candidate_generator",
+            "constraint_engine",
+            "scoring_engine",
+            "diversity_engine",
+            "optimizer",
+            "reliability_engine"
+          ],
+          "properties": {
+            "candidate_generator": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "constraint_engine": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "scoring_engine": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "diversity_engine": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "optimizer": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "reliability_engine": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "p0_passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "p0_failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-const { parseFeedback: parseFeedbackWithLLM } = require("../../services/ml/mlClient");
+const { parseUserInputDeterministic } = require("../userState/symptomInterpreter");
 
 const VALID_TYPES = new Set(["LIKE", "DISLIKE", "REPLACE"]);
 
@@ -43,13 +43,12 @@ async function parseFeedback(input) {
     return { feedback_type: "DISLIKE", target: "" };
   }
 
-  const llmResult = await parseFeedbackWithLLM(safeInput);
-
-  if (!llmResult || typeof llmResult !== "object") {
-    return parseFeedbackSync(safeInput);
+  const deterministic = parseUserInputDeterministic(safeInput);
+  if (Array.isArray(deterministic && deterministic.symptom_tags) && deterministic.symptom_tags.length > 0) {
+    return sanitizeParsedFeedback(parseFeedbackSync(safeInput));
   }
 
-  return sanitizeParsedFeedback(llmResult);
+  return sanitizeParsedFeedback(parseFeedbackSync(safeInput));
 }
 
 module.exports = {

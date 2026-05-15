@@ -1,4 +1,5 @@
 const { validateErrorResponse } = require("./validators/validateErrorResponse");
+const { buildDualTrace, ensureValidTrace } = require("./utils/traceSafety");
 
 function toSafeString(value, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -8,80 +9,18 @@ function toSafeObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function toSafeNumber(value, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function buildMinimalTrace(traceId) {
-  const safeTraceId = toSafeString(traceId, "unknown_trace");
-  const now = Math.max(0, Math.floor(Date.now()));
-
-  return {
-    version: "Trace_v1",
-    schema_version: 1,
-    compatibility: "backward",
-    trace_id: safeTraceId,
-    timestamp: now,
-    stages: {
-      candidate_generator: {
-        input_count: 1,
-        output_count: 0,
-      },
-      constraint_engine: {
-        input_count: 1,
-        output_count: 0,
-        rejected: 1,
-        rules: [
-          {
-            rule_id: "error_boundary",
-            action: "reject",
-            reason: "response_failed",
-          },
-        ],
-      },
-      scoring_engine: {
-        input_count: 0,
-        output_count: 0,
-      },
-      diversity_engine: {
-        input_count: 0,
-        output_count: 0,
-      },
-      optimizer: {
-        input_count: 0,
-        output_count: 0,
-        combinations_evaluated: 0,
-        selected_score: 0,
-      },
-      reliability_engine: {
-        input_count: 1,
-        output_count: 0,
-      },
-    },
-  };
-}
-
-function normalizeTrace(traceInput, traceId) {
-  const fallbackTrace = buildMinimalTrace(traceId);
-  const safeTrace = toSafeObject(traceInput);
-  const safeStages = toSafeObject(safeTrace.stages);
-
-  if (!safeTrace.version || !safeTrace.schema_version || !safeTrace.compatibility || !safeTrace.trace_id || !safeTrace.timestamp || Object.keys(safeStages).length === 0) {
-    return fallbackTrace;
-  }
-
-  return {
-    ...safeTrace,
-    trace_id: toSafeString(safeTrace.trace_id, toSafeString(traceId, "unknown_trace")),
-    timestamp: Math.max(0, Math.floor(toSafeNumber(safeTrace.timestamp, Date.now()))),
-  };
-}
-
 function buildErrorResponse({ code, message, details, request_id, trace_id, trace, meta } = {}) {
   const safeMeta = toSafeObject(meta);
   const safeRequestId = toSafeString(request_id || safeMeta.request_id, "unknown_request");
   const safeTraceId = toSafeString(trace_id || safeMeta.trace_id, "unknown_trace");
-  const safeTrace = normalizeTrace(trace, safeTraceId);
+  const safeTimestamp = safeMeta.timestamp || Date.now();
+  
+  // Trace Truth Layer: Capture both raw and healed traces even on failure
+  const dualTrace = buildDualTrace(trace, safeTraceId, safeTimestamp);
+
+  // Restore contract shape: trace MUST be ONLY the safe/healed Trace_v1 object
+  const safeTrace = dualTrace.safe;
+  console.log("TRACE VALIDATION INPUT", safeTrace);
 
   const payload = {
     version: "ErrorResponse_v1",
@@ -97,13 +36,19 @@ function buildErrorResponse({ code, message, details, request_id, trace_id, trac
 
   const validation = validateErrorResponse(payload);
   if (!validation.valid) {
+    // If we still fail here, it's a structural logic error in the builder itself
     throw new Error(`ErrorResponse_v1 validation failed: ${JSON.stringify(validation.errors || [])}`);
   }
+
+  // Move debug data outside contract: append after validation
+  payload.trace_debug = {
+    execution: dualTrace.execution,
+    healed: dualTrace.safe,
+  };
 
   return payload;
 }
 
 module.exports = {
   buildErrorResponse,
-  buildMinimalTrace,
 };

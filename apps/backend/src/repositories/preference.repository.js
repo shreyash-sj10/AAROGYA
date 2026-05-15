@@ -1,6 +1,8 @@
 const pg = require("../services/db/pg.service");
 
+// Cache-only map. DB is source of truth.
 const preferenceStore = new Map();
+const CACHE_TTL_MS = Math.max(1_000, Number(process.env.AAROGYA_PREF_CACHE_TTL_MS || 300000));
 
 function toSafeString(value, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -8,6 +10,23 @@ function toSafeString(value, fallback = "") {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function setCache(id, weights) {
+  preferenceStore.set(id, {
+    value: clone(weights),
+    expiresAt: Date.now() + CACHE_TTL_MS,
+  });
+}
+
+function getCache(id) {
+  const entry = preferenceStore.get(id);
+  if (!entry || typeof entry !== "object") return null;
+  if (Date.now() > Number(entry.expiresAt || 0)) {
+    preferenceStore.delete(id);
+    return null;
+  }
+  return clone(entry.value);
 }
 
 async function getPreference(userId) {
@@ -19,22 +38,24 @@ async function getPreference(userId) {
   );
 
   if (dbResult && dbResult.rows && dbResult.rows[0]) {
-    return clone(dbResult.rows[0].weights || null);
+    const weights = clone(dbResult.rows[0].weights || null);
+    if (weights && typeof weights === "object") {
+      setCache(id, weights);
+    }
+    return weights;
   }
 
-  return clone(preferenceStore.get(id) || null);
+  return null;
 }
 
 function getPreferenceSync(userId) {
   const id = toSafeString(userId, "anonymous");
-  return clone(preferenceStore.get(id) || null);
+  return getCache(id);
 }
 
 async function upsertPreference(userId, weights) {
   const id = toSafeString(userId, "anonymous");
   const safeWeights = weights && typeof weights === "object" ? clone(weights) : {};
-
-  preferenceStore.set(id, safeWeights);
 
   await pg.query(
     [
@@ -45,13 +66,14 @@ async function upsertPreference(userId, weights) {
     [id, JSON.stringify(safeWeights)]
   );
 
+  setCache(id, safeWeights);
   return clone(safeWeights);
 }
 
 function upsertPreferenceSync(userId, weights) {
   const id = toSafeString(userId, "anonymous");
   const safeWeights = weights && typeof weights === "object" ? clone(weights) : {};
-  preferenceStore.set(id, safeWeights);
+  setCache(id, safeWeights);
   return clone(safeWeights);
 }
 

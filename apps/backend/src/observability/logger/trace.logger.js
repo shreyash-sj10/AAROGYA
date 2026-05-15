@@ -1,10 +1,4 @@
-function toSafeObject(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-function toSafeNumber(value, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+const { toSafeObject, toSafeNumber } = require("../../utils/safeUtils");
 
 function logTrace(tracePayload = {}) {
   const safe = toSafeObject(tracePayload);

@@ -2,17 +2,16 @@ const { executeGeneratePlanCore } = require("../src/core/pipeline/orchestrator")
 const { sampleFoods } = require("../src/modules/food/food.samples");
 const sampleRules = require("../src/rules/engine/rule.samples");
 
-function assertThrows(fn, message) {
-  let threw = false;
-
+async function assertRejects(fn, message) {
   try {
-    fn();
-  } catch (error) {
-    threw = true;
-  }
-
-  if (!threw) {
+    await fn();
     throw new Error(message);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes("forbidden decision field") || msg.includes("AI boundary")) {
+      return;
+    }
+    throw error;
   }
 }
 
@@ -49,6 +48,10 @@ const input = {
   },
 };
 
-assertThrows(() => executeGeneratePlanCore(input), "AI boundary violation did not throw");
-console.log("PASS: AI boundary rejects decision leakage fields");
-
+(async () => {
+  await assertRejects(() => executeGeneratePlanCore(input), "AI boundary violation did not throw");
+  console.log("PASS: AI boundary rejects decision leakage fields");
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

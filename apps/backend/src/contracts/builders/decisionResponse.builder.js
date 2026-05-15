@@ -1,7 +1,7 @@
 const { validateDecisionResponse } = require("../validators/validateDecisionResponse");
 const { validateTrace } = require("../validators/validateTrace");
 const { ContractViolationError } = require("../errors/ContractViolationError");
-const { buildDualTrace, ensureValidTrace } = require("../utils/traceSafety");
+const { buildDualTrace } = require("../utils/traceSafety");
 
 function toSafeObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -83,11 +83,30 @@ function normalizeMealPlan(mealPlan, isFallback) {
       });
     }
 
-    return {
+    const normalizedEntry = {
       recipe_id,
       name,
       quantity: normalizeQuantity(safeEntry.quantity),
     };
+
+    const nutrition = toSafeObject(safeEntry.nutrition);
+    const hasNutrition = (
+      typeof nutrition.calories === "number"
+      || typeof nutrition.protein === "number"
+      || typeof nutrition.carbs === "number"
+      || typeof nutrition.fat === "number"
+    );
+
+    if (hasNutrition) {
+      normalizedEntry.nutrition = {
+        calories: Math.max(0, toSafeNumber(nutrition.calories, 0)),
+        protein: Math.max(0, toSafeNumber(nutrition.protein, 0)),
+        carbs: Math.max(0, toSafeNumber(nutrition.carbs, 0)),
+        fat: Math.max(0, toSafeNumber(nutrition.fat, 0)),
+      };
+    }
+
+    return normalizedEntry;
   });
 
   return normalized;
@@ -277,7 +296,7 @@ function buildTrace(input) {
   // and include the raw execution trace for observability.
   const trace = buildDualTrace(rawTrace, safe.traceId, safe.timestamp);
 
-  // Still assert integrity on the "safe" version (which is at the root of the dual trace)
+  // Assert integrity on the primary (raw execution) trace.
   assertTraceIntegrity(trace);
 
   const traceValidation = validateTrace(trace);
@@ -327,9 +346,6 @@ function buildDecisionResponse(input) {
     refinementLoop: toSafeObject(safe.refinementLoop),
   });
 
-  // Restore contract shape: trace MUST be ONLY the safe/healed Trace_v1 object
-  const safeTrace = dualTrace.safe;
-
   const stageStats = toSafeObject(safe.stageStats);
   const isFallback = Boolean(
     toSafeNumber(toSafeObject(stageStats.optimizer).output_count, -1) === 0 ||
@@ -357,7 +373,7 @@ function buildDecisionResponse(input) {
         relaxation_impact: typeof toSafeObject(internal.confidence.components).relaxation_impact === "number" ? clamp01(internal.confidence.components.relaxation_impact) : 1,
       },
     },
-    trace: safeTrace,
+    trace: dualTrace,
     explanation: normalizeExplanation(internal.explanation),
     insights: normalizeStringList(internal.insights),
     warnings: normalizeStringList(internal.warnings),
@@ -385,3 +401,6 @@ module.exports = {
   buildDecisionResponse,
   assertTraceIntegrity,
 };
+
+
+

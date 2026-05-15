@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String      @id @default(uuid())
+  email     String      @unique
+  password  String
+  createdAt DateTime    @default(now())
+
+  context   UserContext?
+}
+
+model UserContext {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+
+  context   Json
+  updatedAt DateTime @updatedAt
+}
+
+model UserMealHistory {
+  id        BigInt   @id @default(autoincrement())
+  user_id   String
+  meal_id   String
+  category  String?
+  timestamp DateTime @default(now())
+
+  @@map("user_meal_history")
+  @@index([user_id, timestamp], map: "idx_user_meal_history_user_time")
+}
+
+model UserWeeklyAdherence {
+  id              BigInt   @id @default(autoincrement())
+  user_id         String
+  week_id         String
+  adherence_score Float    @default(0)
+  stats           Json     @default("{}")
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@map("user_weekly_adherence")
+  @@unique([user_id, week_id], map: "uniq_user_weekly_adherence_user_week")
+  @@index([user_id, week_id], map: "idx_user_weekly_adherence_user_week")
+}

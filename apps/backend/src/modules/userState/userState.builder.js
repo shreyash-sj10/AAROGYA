@@ -1,7 +1,7 @@
 const { interpretSymptoms, parseUserInputDeterministic } = require("./symptomInterpreter");
-const { getAIProfile } = require("../../services/ml/mlClient");
 const { validateAIProfile } = require("../../contracts/validators/validateAIProfile");
 const { logLLMValidation, logLLMFallback } = require("../../observability/llm.logger");
+const { toSafeNumber, toSafeString, toSafeArray } = require("../../utils/safeUtils");
 
 const DEFAULT_PRAKRITI = {
   vata: 0,
@@ -22,20 +22,8 @@ const DEFAULT_CONTEXT = {
 
 const AI_CONFIDENCE_THRESHOLD = 0.6;
 
-function toSafeNumber(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function toSafeString(value, fallback) {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
-}
-
 function toSafeStringArray(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
+  return toSafeArray(value)
     .filter((item) => typeof item === "string")
     .map((item) => item.trim())
     .filter(Boolean);
@@ -110,55 +98,45 @@ async function buildUserStateWithAI(userDB, userInput = {}) {
   const text = toSafeString(safeUserInput.text || safeUserInput.userInput || safeUserInput.query, "");
 
   const deterministic = parseUserInputDeterministic(text);
-  const fallbackGenAI = {
-    symptom_tags: deterministic.symptom_tags,
-    risk_flags: deterministic.risk_flags,
+  const validationInput = {
+    version: "AIProfileOutput_v1",
+    schema_version: 1,
+    compatibility: "backward",
+    risk_flags: toSafeStringArray(deterministic.risk_flags),
+    dosha_estimate: normalizeDosha(deterministic.dosha_estimate),
+    confidence: Math.max(0, Math.min(1, toSafeNumber(deterministic.confidence, 0.5))),
   };
+
+  const validation = validateAIProfile(validationInput);
+  logLLMValidation({
+    endpoint: "ai/profile",
+    request_id: "user_state_builder",
+    valid: validation.valid,
+    errors: validation.errors || [],
+  });
 
   let profiled = {
-    risk_flags: fallbackGenAI.risk_flags,
-    dosha_estimate: normalizeDosha(deterministic.dosha_estimate),
-    confidence: toSafeNumber(deterministic.confidence, 0.5),
+    risk_flags: validationInput.risk_flags,
+    dosha_estimate: validationInput.dosha_estimate,
+    confidence: validationInput.confidence,
   };
 
-  try {
-    const aiProfile = await getAIProfile(text);
-    const validationInput = {
-      version: "AIProfileOutput_v1",
-      schema_version: 1,
-      compatibility: "backward",
-      risk_flags: toSafeStringArray(aiProfile && aiProfile.risk_flags),
-      dosha_estimate: normalizeDosha(aiProfile && aiProfile.dosha_estimate),
-      confidence: Math.max(0, Math.min(1, toSafeNumber(aiProfile && aiProfile.confidence, 0))),
-    };
-
-    const validation = validateAIProfile(validationInput);
-    logLLMValidation({
+  if (!validation.valid || toSafeNumber(validationInput.confidence, 0) < AI_CONFIDENCE_THRESHOLD) {
+    logLLMFallback({
       endpoint: "ai/profile",
       request_id: "user_state_builder",
-      valid: validation.valid,
-      errors: validation.errors || [],
+      reason: validation.valid ? "confidence_below_threshold" : "schema_invalid",
     });
 
-    if (validation.valid && toSafeNumber(validationInput.confidence, 0) >= AI_CONFIDENCE_THRESHOLD) {
-      profiled = {
-        risk_flags: validationInput.risk_flags,
-        dosha_estimate: validationInput.dosha_estimate,
-        confidence: validationInput.confidence,
-      };
-    } else {
-      logLLMFallback({
-        endpoint: "ai/profile",
-        request_id: "user_state_builder",
-        reason: validation.valid ? "confidence_below_threshold" : "schema_invalid",
-      });
-    }
-  } catch (error) {
-    logLLMFallback({ endpoint: "ai/profile", request_id: "user_state_builder", reason: "profile_request_failed" });
+    profiled = {
+      risk_flags: toSafeStringArray(deterministic.risk_flags),
+      dosha_estimate: normalizeDosha(deterministic.dosha_estimate),
+      confidence: Math.max(0, Math.min(1, toSafeNumber(deterministic.confidence, 0.5))),
+    };
   }
 
   const mergedGenAi = {
-    symptom_tags: fallbackGenAI.symptom_tags,
+    symptom_tags: toSafeStringArray(deterministic.symptom_tags),
     risk_flags: profiled.risk_flags,
   };
 

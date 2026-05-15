@@ -39,7 +39,7 @@ export function createInitialPlanBuilderFormState(): PlanBuilderFormState {
       height_cm: null,
       weight_kg: null,
     },
-    user_id: "frontend_user",
+    user_id: "",
     goals: [],
     risk_flags: [],
     symptoms: [],
@@ -105,3 +105,4 @@ export function buildDecisionRequest(
     },
   };
 }
+

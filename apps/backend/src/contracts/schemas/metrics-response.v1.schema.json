@@ -19,6 +19,7 @@
                      "avg_optimizer_ms",
                      "avg_candidate_count",
                      "fallback_rate",
+                     "engine_health",
                      "totals",
                      "last_request",
                      "confidence_distribution",
@@ -81,6 +82,35 @@
                                              "type":  "number",
                                              "minimum":  0,
                                              "maximum":  1
+                                         },
+                       "engine_health":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "required":  [
+                                                              "p0_violation_plans_total",
+                                                              "avg_relaxation_level",
+                                                              "relaxation_samples",
+                                                              "p0_trace_flag_rate"
+                                                          ],
+                                             "properties":  {
+                                                                "p0_violation_plans_total":  {
+                                                                                                 "type":  "integer",
+                                                                                                 "minimum":  0
+                                                                                             },
+                                                                "avg_relaxation_level":  {
+                                                                                             "type":  "number",
+                                                                                             "minimum":  0
+                                                                                         },
+                                                                "relaxation_samples":  {
+                                                                                           "type":  "integer",
+                                                                                           "minimum":  0
+                                                                                       },
+                                                                "p0_trace_flag_rate":  {
+                                                                                           "type":  "number",
+                                                                                           "minimum":  0,
+                                                                                           "maximum":  1
+                                                                                       }
+                                                            }
                                          },
                        "totals":  {
                                       "type":  "object",
@@ -148,7 +178,18 @@
                                                                                                      "medium",
                                                                                                      "high"
                                                                                                  ]
-                                                                                    }
+                                                                                    },
+                                                               "p0_violations":  {
+                                                                                     "type":  "integer",
+                                                                                     "minimum":  0
+                                                                                 },
+                                                               "relaxation_level":  {
+                                                                                        "type":  "integer",
+                                                                                        "minimum":  0
+                                                                                    },
+                                                               "fallback_reason":  {
+                                                                                       "type":  "string"
+                                                                                   }
                                                            }
                                         },
                        "confidence_distribution":  {

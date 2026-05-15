@@ -8,7 +8,7 @@ Reason:
 - Runtime is already contract-first and deterministic.
 - ML is assistive and optional behind schema + confidence gating.
 - Optimizer is beam-first with deterministic greedy fallback.
-- Reliability flow in current implementation is not full `P3 -> P2 -> P1`; it is staged `P3` relaxation, then `P2+P3`, then strict `P0` safe fallback.
+- Reliability flow: strict pass, then staged rule **exclusion** for recovery levels **1 → 2 → 3** (exclude P3; then P2+P3; then P1+P2+P3), then safe fallback. **P0 is never excluded**; **every** emitted plan is **P0 output-validated**. (See `reliabilityEngine.js` `RELAXATION_LEVELS` and `assertP0Compliance`.)
 
 This document now reflects the implemented system exactly.
 
@@ -54,14 +54,19 @@ Implemented behavior:
 
 ## Reliability Semantics (Implemented)
 
-Current staged recovery in fallback engine:
-1. Attempt with `P3` relaxed
-2. If needed, attempt with `P2 + P3` relaxed
-3. If still infeasible, return strict safe fallback validated against `P0`
+Staged recovery in `reliabilityEngine.computeReliabilityResult`:
+
+1. **Level 0 (strict):** full rule set; if optimizer yields a non-empty plan, return after P0 compliance check.
+2. **Level 1:** active rules exclude **P3** only.
+3. **Level 2:** active rules exclude **P2** and **P3**.
+4. **Level 3:** active rules exclude **P1**, **P2**, and **P3** (deepest recovery before generic fallback).
+5. If still no plan: **safe fallback** (`getFallbackMeal` / emergency P0-safe path), then P0 compliance check.
 
 Important:
-- `P0` is never relaxed.
-- `P1` is currently not relaxed in this runtime path.
+
+- **P0 is never excluded** from the filter pass (it is not listed in `excludedPriorities` at any level).
+- **P1** may be excluded **only at level 3** when levels 1–2 did not yield a feasible plan.
+- **P0 compliance** is asserted on the **output** meal plan for every return path (`assertP0Compliance`).
 - All fallback/relaxation outcomes are surfaced in metadata and trace context.
 
 ## Confidence Model (Implemented)

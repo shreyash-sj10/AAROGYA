@@ -1,8 +1,4 @@
 const Ajv = require("ajv");
-const { callML } = require("./mlClient");
-
-const PRAKRITI_ML_ENDPOINT = process.env.AYUDIET_ML_PRAKRITI_ENDPOINT || "prakriti";
-const USE_ML = String(process.env.USE_ML || "true").trim().toLowerCase() === "true";
 
 const requestSchema = {
   type: "object",
@@ -95,6 +91,36 @@ function normalizeScores(scores) {
   };
 }
 
+function inferPrakritiDeterministic(payload) {
+  const answers = payload && payload.answers && typeof payload.answers === "object" ? payload.answers : {};
+  let vata = 0;
+  let pitta = 0;
+  let kapha = 0;
+
+  const score = {
+    body_build: { thin: [2, 0, 0], medium: [0, 1, 0], heavy: [0, 0, 2] },
+    skin: { dry: [2, 0, 0], warm_oily: [0, 2, 0], thick_cool: [0, 0, 2] },
+    appetite: { irregular: [2, 0, 0], strong: [0, 2, 0], slow: [0, 0, 2] },
+    energy: { variable: [2, 0, 0], intense: [0, 2, 0], stable: [0, 0, 2] },
+    nature: { anxious: [2, 0, 0], irritable: [0, 2, 0], calm: [0, 0, 2] },
+    sleep: { light: [2, 0, 0], moderate: [0, 1, 0], deep: [0, 0, 2] },
+    climate: { dry: [2, 0, 0], warm: [0, 2, 0], cool: [0, 0, 2] },
+    food_response: { bloated: [2, 0, 0], acidic: [0, 2, 0], sluggish: [0, 0, 2] },
+    work_style: { inconsistent: [2, 0, 0], intense: [0, 2, 0], steady: [0, 0, 2] },
+    weight: { lose: [2, 0, 0], stable: [0, 1, 0], gain: [0, 0, 2] },
+  };
+
+  Object.keys(score).forEach((key) => {
+    const answer = String(answers[key] || "");
+    const [a, b, c] = score[key][answer] || [0, 0, 0];
+    vata += a;
+    pitta += b;
+    kapha += c;
+  });
+
+  return normalizeScores({ vata, pitta, kapha });
+}
+
 async function fetchMlPrakriti(payload) {
   const validRequest = validateRequest(payload);
   if (!validRequest) {
@@ -104,16 +130,7 @@ async function fetchMlPrakriti(payload) {
     throw error;
   }
 
-  if (!USE_ML) {
-    const error = new Error("ML disabled");
-    error.code = "ML_DISABLED";
-    throw error;
-  }
-
-  const data = await callML(PRAKRITI_ML_ENDPOINT, payload, { request_id: "prakriti_ml" });
-  const scores = data && typeof data === "object" && data.scores && typeof data.scores === "object"
-    ? data.scores
-    : data;
+  const scores = inferPrakritiDeterministic(payload);
 
   const validResponse = validateResponse(scores);
   if (!validResponse) {

@@ -1,12 +1,11 @@
 const QUANTITY_CONFIG = require("../../config/quantity");
+const { toSafeNumber } = require("../../utils/safeUtils");
 
 const GOAL_WEIGHT_LOSS = "GOAL_WEIGHT_LOSS";
 const GOAL_MAINTENANCE = "GOAL_MAINTENANCE";
 const GOAL_MUSCLE_GAIN = "GOAL_MUSCLE_GAIN";
 
-function toSafeNumber(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+
 
 function normalizeActivityLevel(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";

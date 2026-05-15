@@ -64,14 +64,43 @@ function buildInput() {
   };
 }
 
-(function runFallbackP0Safety() {
-  const output = executeGeneratePlanCore(buildInput());
+(async function runFallbackP0Safety() {
+  const output = await executeGeneratePlanCore(buildInput());
   const names = output.meal_plan.map((item) => String(item.name || "").toLowerCase());
 
   assert(output.trace.stages.optimizer.output_count === 0, "expected empty optimizer result to trigger fallback path");
   assert(!names.some((name) => name.includes("unsafe dal")), "fallback selected P0-blocked candidate");
   assert(output.meal_plan.length > 0, "fallback should still produce a safe meal");
 
+  // ── P0 Trace guarantees ──────────────────────────────────────────────────────
+  const constraintStage = output.trace.stages.constraint_engine;
+
+  assert(
+    typeof constraintStage.p0_rules_checked === "number",
+    "trace.stages.constraint_engine.p0_rules_checked is a number"
+  );
+  assert(
+    constraintStage.p0_rules_checked >= 1,
+    "trace.stages.constraint_engine.p0_rules_checked >= 1 (P0 rule was active)"
+  );
+  assert(
+    typeof constraintStage.p0_violations === "number",
+    "trace.stages.constraint_engine.p0_violations is a number"
+  );
+  assert(
+    constraintStage.p0_violations >= 0,
+    "trace.stages.constraint_engine.p0_violations is non-negative"
+  );
+  assert(
+    Array.isArray(constraintStage.p0_violated_rule_ids),
+    "trace.stages.constraint_engine.p0_violated_rule_ids is an array"
+  );
+
   console.log("PASS: fallback remains P0-safe when optimizer output is empty");
+  console.log("PASS: trace.stages.constraint_engine includes all P0 metadata fields");
+  console.log("  p0_rules_checked:", constraintStage.p0_rules_checked);
+  console.log("  p0_violations:", constraintStage.p0_violations);
+  console.log("  p0_violated_rule_ids:", JSON.stringify(constraintStage.p0_violated_rule_ids));
 })();
+
 

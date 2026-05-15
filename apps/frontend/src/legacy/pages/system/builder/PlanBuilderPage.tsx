@@ -278,7 +278,7 @@ export function PlanBuilderPage() {
     setPrakritiLoading(false);
 
     if (result.error || !result.data) {
-      setPrakritiError(result.error?.error?.message || "Prakriti estimation failed");
+      setPrakritiError("Unable to process request. Please try a more specific question.");
       return;
     }
 
@@ -549,6 +549,7 @@ export function PlanBuilderPage() {
     </form>
   );
 }
+
 
 
 

@@ -1,3 +1,5 @@
+const DEFAULT_OPTIMIZER_CONFIG = require("../../config/optimizer");
+
 function toSafeObject(value) {
   return value && typeof value === "object" ? value : {};
 }
@@ -16,7 +18,7 @@ function toSafeString(value, fallback) {
 
 function getCandidateScore(candidate) {
   const safeCandidate = toSafeObject(candidate);
-  return toSafeNumber(safeCandidate.score, 0);
+  return toSafeNumber(safeCandidate.finalScore, toSafeNumber(safeCandidate.score, 0));
 }
 
 function getCandidatePenalty(candidate) {
@@ -121,18 +123,52 @@ function sortCandidates(candidates) {
     });
 }
 
-function runBeamSearch(candidatesByCategory, beamWidth) {
+function dedupeCombinations(combinations) {
+  const map = new Map();
+
+  toSafeArray(combinations).forEach((combo) => {
+    const key = getCombinationLexicalKey(combo);
+    const prev = map.get(key);
+    if (!prev || compareCombinations(combo, prev) < 0) {
+      map.set(key, combo);
+    }
+  });
+
+  return Array.from(map.values());
+}
+
+function recordOptimizerSearchTelemetry(payload) {
+  try {
+    const { recordOptimizerSearch } = require("../../observability/metrics");
+    recordOptimizerSearch(payload);
+  } catch (_) {
+    /* optional in stripped test harnesses */
+  }
+}
+
+function runBeamSearch(candidatesByCategory, beamWidth, optimizerConfig) {
+  const cfg = {
+    ...DEFAULT_OPTIMIZER_CONFIG,
+    ...(optimizerConfig && typeof optimizerConfig === "object" ? optimizerConfig : {}),
+  };
+
   const safeCandidatesByCategory = toSafeObject(candidatesByCategory);
   const categories = Object.keys(safeCandidatesByCategory).sort((a, b) => a.localeCompare(b));
-  const safeBeamWidth = Math.max(1, Math.floor(toSafeNumber(beamWidth, 1)));
+  const requestedBeam = Math.max(1, Math.floor(toSafeNumber(beamWidth, 1)));
+  const safeBeamWidth = Math.min(requestedBeam, Math.max(1, Math.floor(toSafeNumber(cfg.maxBeamStates, 12))));
+  const maxPerCat = Math.max(1, Math.floor(toSafeNumber(cfg.maxCandidatesPerCategory, 32)));
+  const userIntermediateCap = Math.floor(toSafeNumber(cfg.maxBeamIntermediateStates, 2500));
+  const maxIntermediate = Math.max(safeBeamWidth, userIntermediateCap);
 
   let beam = [{ items: [], totalScore: 0, totalPenalty: 0 }];
+  let layerExpansions = 0;
+  let pruneEvents = 0;
 
   for (const category of categories) {
-    const categoryCandidates = sortCandidates(safeCandidatesByCategory[category]);
+    const categoryCandidates = sortCandidates(safeCandidatesByCategory[category])
+      .slice(0, maxPerCat);
 
     if (categoryCandidates.length === 0) {
-      // Skip empty category so caller can decide fallback policy.
       continue;
     }
 
@@ -143,6 +179,7 @@ function runBeamSearch(candidatesByCategory, beamWidth) {
     if (categoryCandidates.length === 1) {
       const onlyCandidate = categoryCandidates[0];
       beam = beam.map((combination) => expandWithCandidate(combination, onlyCandidate));
+      layerExpansions += beam.length;
       continue;
     }
 
@@ -154,10 +191,22 @@ function runBeamSearch(candidatesByCategory, beamWidth) {
       }
     }
 
-    beam = newBeam
-      .sort(compareCombinations)
-      .slice(0, safeBeamWidth);
+    layerExpansions += newBeam.length;
+
+    const merged = dedupeCombinations(newBeam);
+    if (merged.length > maxIntermediate) {
+      pruneEvents += 1;
+    }
+
+    const ranked = merged.sort(compareCombinations);
+    const topPool = ranked.length > maxIntermediate ? ranked.slice(0, maxIntermediate) : ranked;
+    beam = topPool.slice(0, safeBeamWidth);
   }
+
+  recordOptimizerSearchTelemetry({
+    beam_layer_expansions: layerExpansions,
+    beam_prune_events: pruneEvents,
+  });
 
   if (beam.length === 0) {
     return null;
@@ -177,10 +226,10 @@ function runBeamSearch(candidatesByCategory, beamWidth) {
     items: best.items.map((item) => sanitizeCandidate(item)),
     totalScore: Number(toSafeNumber(best.totalScore, 0).toFixed(6)),
     totalPenalty: Number(toSafeNumber(best.totalPenalty, 0).toFixed(6)),
+    secondBestScore: beam.length > 1 ? Number(toSafeNumber(beam[1].totalScore, 0).toFixed(6)) : 0,
   };
 }
 
 module.exports = {
   runBeamSearch,
 };
-

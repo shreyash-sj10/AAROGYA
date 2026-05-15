@@ -72,13 +72,13 @@ export function ProfileStep({ showErrors = false }: ProfileStepProps) {
   };
 
   const inputClass =
-    "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500";
+    "mt-1 w-full rounded-xl border border-[#E6E1D8] bg-white px-3 py-2 text-sm text-[#2F2F2F] focus:border-[#7A6F4B] focus:outline-none focus:ring-1 focus:ring-[#7A6F4B]";
   const errorRing = "border-red-400 focus:border-red-500 focus:ring-red-500";
 
   return (
     <section className="flex flex-col gap-5">
       <div>
-        <label htmlFor="onboarding-profile-name" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="onboarding-profile-name" className="block text-sm font-medium text-[#2F2F2F]">
           Full name
         </label>
         <input
@@ -94,7 +94,7 @@ export function ProfileStep({ showErrors = false }: ProfileStepProps) {
       </div>
 
       <div>
-        <label htmlFor="onboarding-profile-age" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="onboarding-profile-age" className="block text-sm font-medium text-[#2F2F2F]">
           Age
         </label>
         <input
@@ -112,7 +112,7 @@ export function ProfileStep({ showErrors = false }: ProfileStepProps) {
 
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
-          <label htmlFor="onboarding-profile-height" className="block text-sm font-medium text-slate-700">
+          <label htmlFor="onboarding-profile-height" className="block text-sm font-medium text-[#2F2F2F]">
             Height (cm)
           </label>
           <input
@@ -129,7 +129,7 @@ export function ProfileStep({ showErrors = false }: ProfileStepProps) {
         </div>
 
         <div>
-          <label htmlFor="onboarding-profile-weight" className="block text-sm font-medium text-slate-700">
+          <label htmlFor="onboarding-profile-weight" className="block text-sm font-medium text-[#2F2F2F]">
             Weight (kg)
           </label>
           <input
@@ -147,7 +147,7 @@ export function ProfileStep({ showErrors = false }: ProfileStepProps) {
       </div>
 
       <div>
-        <label htmlFor="onboarding-profile-gender" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="onboarding-profile-gender" className="block text-sm font-medium text-[#2F2F2F]">
           Gender
         </label>
         <select
@@ -171,8 +171,8 @@ export function ProfileStep({ showErrors = false }: ProfileStepProps) {
       </div>
 
       <div>
-        <label htmlFor="onboarding-profile-activity" className="block text-sm font-medium text-slate-700">
-          Activity level <span className="font-normal text-slate-500">(optional)</span>
+        <label htmlFor="onboarding-profile-activity" className="block text-sm font-medium text-[#2F2F2F]">
+          Activity level <span className="font-normal text-gray-400">(optional)</span>
         </label>
         <input
           id="onboarding-profile-activity"
@@ -191,3 +191,4 @@ export function ProfileStep({ showErrors = false }: ProfileStepProps) {
     </section>
   );
 }
+

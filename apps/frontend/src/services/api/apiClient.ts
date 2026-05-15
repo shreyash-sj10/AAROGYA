@@ -1,6 +1,7 @@
 import type { ZodTypeAny } from "zod";
 import type { ErrorResponseV1 } from "@/contracts/ErrorResponseV1";
 import { parseErrorResponseOrThrow, UnknownContractError } from "@/utils/errorMapper";
+import { useAuthStore } from "@/store/auth.store";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
@@ -27,6 +28,7 @@ export type ApiRequestOptions = {
   retry?: boolean;
   signal?: AbortSignal;
   headers?: Record<string, string>;
+  requireAuth?: boolean;
 };
 
 export type ApiResult<T> = {
@@ -40,7 +42,13 @@ export type ApiResult<T> = {
   };
 };
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+if (!BASE_URL || typeof BASE_URL !== "string") {
+  throw new Error("VITE_API_BASE_URL is required for API client initialization.");
+}
+const AUTH_TOKEN_KEY = "aarogya_auth_token";
+const PROTECTED_PATH_PREFIXES = ["/user/"];
 
 function shouldRetry(method: HttpMethod, retry?: boolean): boolean {
   return method === "GET" && retry === true;
@@ -58,6 +66,32 @@ function resolveIdentity(options: ApiRequestOptions, requestBody: unknown) {
     requestId: options.requestId || requestIdFromBody,
     traceId: options.traceId || traceIdFromBody,
   };
+}
+
+function resolveToken(): string | null {
+  const storeToken = useAuthStore.getState().token;
+  if (storeToken && storeToken.trim().length > 0) {
+    return storeToken;
+  }
+
+  try {
+    const localToken = localStorage.getItem(AUTH_TOKEN_KEY);
+    return localToken && localToken.trim().length > 0 ? localToken : null;
+  } catch {
+    return null;
+  }
+}
+
+function isProtectedPath(path: string): boolean {
+  return PROTECTED_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+function handleUnauthorized() {
+  useAuthStore.getState().logout();
+
+  if (typeof window !== "undefined" && window.location.pathname !== "/app/login") {
+    window.location.replace("/app/login");
+  }
 }
 
 export async function apiClient<T>(options: ApiRequestOptions): Promise<ApiResult<T>> {
@@ -88,6 +122,15 @@ export async function apiClient<T>(options: ApiRequestOptions): Promise<ApiResul
       })();
 
       const identity = resolveIdentity(options, validatedRequestBody);
+      const token = resolveToken();
+      const authRequired = Boolean(options.requireAuth || isProtectedPath(options.path));
+
+      if (authRequired && !token) {
+        throw new ContractValidationError("Authentication required. Please log in again.", {
+          path: options.path,
+          code: "AUTH_REQUIRED",
+        });
+      }
 
       if (options.signal) {
         if (options.signal.aborted) {
@@ -107,9 +150,10 @@ export async function apiClient<T>(options: ApiRequestOptions): Promise<ApiResul
           "Content-Type": "application/json",
           ...(identity.requestId ? { "x-request-id": identity.requestId } : {}),
           ...(identity.traceId ? { "x-trace-id": identity.traceId } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...(options.headers || {}),
         },
-        body: validatedRequestBody ? JSON.stringify(validatedRequestBody) : undefined,
+        body: validatedRequestBody !== undefined ? JSON.stringify(validatedRequestBody) : undefined,
         signal: controller.signal,
       });
 
@@ -117,6 +161,10 @@ export async function apiClient<T>(options: ApiRequestOptions): Promise<ApiResul
       const durationMs = Date.now() - startedAt;
 
       if (!response.ok) {
+        if (response.status === 401) {
+          handleUnauthorized();
+        }
+
         const non2xxSchema = options.non2xxResponseSchemas?.[response.status];
         if (non2xxSchema) {
           const validated = non2xxSchema.safeParse(payload);

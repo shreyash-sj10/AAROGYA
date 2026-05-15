@@ -93,6 +93,34 @@
                       "minLength": 1
                     }
                   }
+                },
+                "nutrition": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "calories",
+                    "protein",
+                    "carbs",
+                    "fat"
+                  ],
+                  "properties": {
+                    "calories": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "protein": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "carbs": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "fat": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  }
                 }
               }
             }
@@ -176,6 +204,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
+            "interpretation_layer",
             "candidate_generator",
             "constraint_engine",
             "scoring_engine",
@@ -186,7 +215,7 @@
           "properties": {
             "candidate_generator": {
               "type": "object",
-              "additionalProperties": false,
+              "additionalProperties": true,
               "required": [
                 "input_count",
                 "output_count"
@@ -204,12 +233,15 @@
             },
             "constraint_engine": {
               "type": "object",
-              "additionalProperties": false,
+              "additionalProperties": true,
               "required": [
                 "input_count",
                 "output_count",
                 "rejected",
-                "rules"
+                "rules",
+                "p0_rules_checked",
+                "p0_violations",
+                "p0_violated_rule_ids"
               ],
               "properties": {
                 "input_count": {
@@ -252,12 +284,26 @@
                       }
                     }
                   }
+                },
+                "p0_rules_checked": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "p0_violations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "p0_violated_rule_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               }
             },
             "scoring_engine": {
               "type": "object",
-              "additionalProperties": false,
+              "additionalProperties": true,
               "required": [
                 "input_count",
                 "output_count"
@@ -275,7 +321,7 @@
             },
             "diversity_engine": {
               "type": "object",
-              "additionalProperties": false,
+              "additionalProperties": true,
               "required": [
                 "input_count",
                 "output_count"
@@ -293,7 +339,7 @@
             },
             "optimizer": {
               "type": "object",
-              "additionalProperties": false,
+              "additionalProperties": true,
               "required": [
                 "input_count",
                 "output_count",
@@ -322,7 +368,7 @@
             },
             "reliability_engine": {
               "type": "object",
-              "additionalProperties": false,
+              "additionalProperties": true,
               "required": [
                 "input_count",
                 "output_count"
@@ -335,6 +381,30 @@
                 "output_count": {
                   "type": "integer",
                   "minimum": 0
+                }
+              }
+            },
+            "interpretation_layer": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": [
+                "ml_used",
+                "ml_confidence",
+                "ml_contribution_weight"
+              ],
+              "properties": {
+                "ml_used": {
+                  "type": "boolean"
+                },
+                "ml_confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "ml_contribution_weight": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
                 }
               }
             }

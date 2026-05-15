@@ -1,4 +1,5 @@
 import type { DecisionResponseV1 } from "@/contracts/DecisionResponseV1";
+import type { DecisionRequestV1 } from "@/contracts/DecisionRequestV1";
 import { apiClient, type ApiResult } from "@/services/api/apiClient";
 import { decisionResponseSchema } from "@/validators/response.validator";
 import { z } from "zod";
@@ -21,6 +22,8 @@ const replaceFoodRequestSchema = z.object({
   request_id: z.string().min(1),
   meal_id: z.string().min(1),
   food_item: z.string().min(1),
+  meal_type: z.string().min(1),
+  season: z.string().min(1),
   constraints: z.object({
     max_calories: z.number().nonnegative(),
     diet_type: z.string().min(1),
@@ -39,6 +42,12 @@ const replaceFoodRequestSchema = z.object({
 const regenerateRequestSchema = z.object({
   request_id: z.string().min(1),
   meal_id: z.string().min(1),
+  meal_type: z.string().min(1),
+  season: z.string().min(1),
+  constraints: z.object({
+    max_calories: z.number().nonnegative(),
+    diet_type: z.string().min(1),
+  }).strict(),
   context: z.object({
     goal: z.string().nullable(),
     prakriti: z.object({
@@ -62,6 +71,8 @@ export async function replaceFoodApi(input: {
   request_id: string;
   meal_id: string;
   food_item: string;
+  meal_type: DecisionRequestV1["user_state"]["context"]["meal_type"];
+  season: DecisionRequestV1["user_state"]["context"]["season"];
   decision_context: ActionDecisionContext;
 }): Promise<ApiResult<DecisionResponseV1>> {
   return apiClient<DecisionResponseV1>({
@@ -71,6 +82,8 @@ export async function replaceFoodApi(input: {
       request_id: input.request_id,
       meal_id: input.meal_id,
       food_item: input.food_item,
+      meal_type: input.meal_type,
+      season: input.season,
       constraints: input.decision_context.constraints,
       context: toActionContext(input.decision_context),
     },
@@ -82,6 +95,8 @@ export async function replaceFoodApi(input: {
 export async function regenerateMealApi(input: {
   request_id: string;
   meal_id: string;
+  meal_type: DecisionRequestV1["user_state"]["context"]["meal_type"];
+  season: DecisionRequestV1["user_state"]["context"]["season"];
   decision_context: ActionDecisionContext;
 }): Promise<ApiResult<DecisionResponseV1>> {
   return apiClient<DecisionResponseV1>({
@@ -90,6 +105,9 @@ export async function regenerateMealApi(input: {
     body: {
       request_id: input.request_id,
       meal_id: input.meal_id,
+      meal_type: input.meal_type,
+      season: input.season,
+      constraints: input.decision_context.constraints,
       context: toActionContext(input.decision_context),
     },
     requestSchema: regenerateRequestSchema,

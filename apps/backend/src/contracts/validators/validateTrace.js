@@ -1,5 +1,5 @@
-const { validators } = require("../index");
+const { validateTrace } = require("./index");
 
 module.exports = {
-  validateTrace: validators.validateTrace,
+  validateTrace,
 };

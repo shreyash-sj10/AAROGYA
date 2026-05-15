@@ -38,15 +38,15 @@ export function SymptomsStep({ showErrors = false }: SymptomsStepProps) {
   }, [showErrors, touched, symptoms.text]);
 
   const inputClass =
-    "mt-1 min-h-[120px] w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500";
+    "mt-1 min-h-[120px] w-full rounded-xl border border-[#E6E1D8] bg-white px-3 py-2 text-sm text-[#2F2F2F] focus:border-[#7A6F4B] focus:outline-none focus:ring-1 focus:ring-[#7A6F4B]";
 
   return (
     <section className="flex flex-col gap-2">
       <div>
-        <label htmlFor="onboarding-symptoms" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="onboarding-symptoms" className="block text-sm font-medium text-[#2F2F2F]">
           Symptoms
         </label>
-        <p className="mt-0.5 text-xs text-slate-500">Briefly describe what you are experiencing</p>
+        <p className="mt-0.5 text-xs text-gray-400">Briefly describe what you are experiencing</p>
         <textarea
           id="onboarding-symptoms"
           className={`${inputClass} ${errors.length > 0 ? "border-red-400 focus:border-red-500 focus:ring-red-500" : ""}`}
@@ -65,3 +65,4 @@ export function SymptomsStep({ showErrors = false }: SymptomsStepProps) {
     </section>
   );
 }
+

@@ -72,15 +72,15 @@ export function HealthStep({ showErrors = false }: HealthStepProps) {
   }, [showErrors, touched]);
 
   const inputClass =
-    "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500";
+    "mt-1 w-full rounded-xl border border-[#E6E1D8] bg-white px-3 py-2 text-sm text-[#2F2F2F] focus:border-[#7A6F4B] focus:outline-none focus:ring-1 focus:ring-[#7A6F4B]";
 
   return (
     <section className="flex flex-col gap-5">
       <div>
-        <label htmlFor="onboarding-health-conditions" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="onboarding-health-conditions" className="block text-sm font-medium text-[#2F2F2F]">
           Conditions
         </label>
-        <p className="mt-0.5 text-xs text-slate-500">Separate items with commas (e.g. diabetes, hypertension)</p>
+        <p className="mt-0.5 text-xs text-gray-400">Separate items with commas (e.g. diabetes, hypertension)</p>
         <input
           id="onboarding-health-conditions"
           className={inputClass}
@@ -95,10 +95,10 @@ export function HealthStep({ showErrors = false }: HealthStepProps) {
       </div>
 
       <div>
-        <label htmlFor="onboarding-health-allergies" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="onboarding-health-allergies" className="block text-sm font-medium text-[#2F2F2F]">
           Allergies
         </label>
-        <p className="mt-0.5 text-xs text-slate-500">Separate items with commas</p>
+        <p className="mt-0.5 text-xs text-gray-400">Separate items with commas</p>
         <input
           id="onboarding-health-allergies"
           className={inputClass}
@@ -113,10 +113,10 @@ export function HealthStep({ showErrors = false }: HealthStepProps) {
       </div>
 
       <div>
-        <label htmlFor="onboarding-health-restrictions" className="block text-sm font-medium text-slate-700">
+        <label htmlFor="onboarding-health-restrictions" className="block text-sm font-medium text-[#2F2F2F]">
           Dietary restrictions
         </label>
-        <p className="mt-0.5 text-xs text-slate-500">Separate items with commas</p>
+        <p className="mt-0.5 text-xs text-gray-400">Separate items with commas</p>
         <input
           id="onboarding-health-restrictions"
           className={inputClass}
@@ -134,3 +134,4 @@ export function HealthStep({ showErrors = false }: HealthStepProps) {
     </section>
   );
 }
+

@@ -8,4 +8,3 @@ console.log(`Total foods: ${foods.length}`);
 for (const category of FOOD_CATEGORIES) {
   console.log(`${category}: ${getFoodsByCategory(category).length}`);
 }
-

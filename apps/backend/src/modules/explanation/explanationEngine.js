@@ -1,8 +1,5 @@
 const { normalizeString, toSafeArray, toSafeNumber } = require("../../utils/normalizeInput");
 
-const { getExplanation } = require("../../services/ml/mlClient");
-const { logLLMFallback } = require("../../observability/llm.logger");
-
 function getSelectedFoods(mealResult) {
   const safeMealResult = mealResult && typeof mealResult === "object" ? mealResult : {};
   const breakdown = safeMealResult.breakdown && typeof safeMealResult.breakdown === "object"
@@ -173,45 +170,11 @@ function buildDeterministicExplanationText(mealResult, highlights, warnings, tra
     parts.push("Some dietary constraints were relaxed to ensure a valid and balanced recommendation. This adjustment remains within safe limits.");
   }
 
+  if (safeTrace.ml_used === true) {
+    parts.push("ML-assisted inference was used to refine symptom and Prakriti interpretation. The final meal selection is based on these interpreted signals governed by validated Ayurvedic rules.");
+  }
+
   return parts.join(" ");
-}
-
-function buildReasoningTrace(highlights, warnings, explanationInput) {
-  const trace = [];
-
-  if (highlights.length > 0) {
-    trace.push(`highlights=${highlights.length}`);
-  }
-
-  if (warnings.length > 0) {
-    trace.push(`warnings=${warnings.length}`);
-  }
-
-  if (toSafeNumber(explanationInput.meta.totalPenalty, 0) > 0) {
-    trace.push(`totalPenalty=${toSafeNumber(explanationInput.meta.totalPenalty, 0)}`);
-  }
-
-  if (toSafeNumber(explanationInput.meta.totalDiversityPenalty, 0) > 0) {
-    trace.push(`totalDiversityPenalty=${toSafeNumber(explanationInput.meta.totalDiversityPenalty, 0)}`);
-  }
-
-  return trace;
-}
-
-function buildAIPayload(mealResult, userState, highlights, warnings, explanationInput) {
-  return {
-    context: {
-      risk_flags: toSafeArray(userState && userState.risk_flags),
-      selected_recipes: toSafeArray(mealResult && mealResult.meal),
-      user_conditions: toSafeArray(userState && userState.conditions),
-      highlights,
-      warnings,
-    },
-    reasoning: {
-      trace: buildReasoningTrace(highlights, warnings, explanationInput),
-      total_score: toSafeNumber(mealResult && mealResult.score, 0),
-    },
-  };
 }
 
 function generateExplanation(mealResult, userState, traceContext) {
@@ -232,34 +195,7 @@ function generateExplanation(mealResult, userState, traceContext) {
 }
 
 async function generateExplanationWithAI(mealResult, userState, traceContext) {
-  const base = generateExplanation(mealResult, userState, traceContext);
-
-  try {
-    const explanationInput = buildExplanationInput(mealResult, userState);
-    const highlights = formatHighlights(explanationInput);
-    const warnings = formatWarnings(explanationInput);
-    const aiPayload = buildAIPayload(mealResult, userState, highlights, warnings, explanationInput);
-    const aiResult = await getExplanation(aiPayload);
-
-    if (!aiResult || typeof aiResult.explanation !== "string" || !aiResult.explanation.trim()) {
-      logLLMFallback({ endpoint: "ai/explain", request_id: "explanation_engine", reason: "empty_ai_explanation" });
-      return base;
-    }
-
-    return {
-      ...base,
-      ai_explanation: aiResult.explanation,
-      citations: Array.isArray(aiResult.citations) ? aiResult.citations : [],
-      sources: Array.isArray(aiResult.citations)
-        ? aiResult.citations
-          .map((item) => (item && typeof item === "object" && typeof item.text_id === "string" ? item.text_id : ""))
-          .filter(Boolean)
-        : [],
-    };
-  } catch (error) {
-    logLLMFallback({ endpoint: "ai/explain", request_id: "explanation_engine", reason: "explanation_call_failed" });
-    return base;
-  }
+  return generateExplanation(mealResult, userState, traceContext);
 }
 
 module.exports = {
@@ -269,8 +205,5 @@ module.exports = {
   generateExplanation,
   generateExplanationWithAI,
 };
-
-
-
 
 

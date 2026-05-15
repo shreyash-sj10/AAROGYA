@@ -31,26 +31,28 @@ const commonContextSchema = {
   },
 };
 
+const constraintsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["max_calories", "diet_type"],
+  properties: {
+    max_calories: { type: "number", minimum: 0 },
+    diet_type: { type: "string", minLength: 1 },
+  },
+};
+
 const replaceFoodRequestSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["request_id", "meal_id", "food_item", "constraints", "context"],
+  required: ["request_id", "meal_id", "food_item", "constraints", "context", "meal_type", "season"],
   properties: {
     request_id: { type: "string", minLength: 1 },
     trace_id: { type: "string", minLength: 1 },
     meal_id: { type: "string", minLength: 1 },
     food_item: { type: "string", minLength: 1 },
-    meal_type: { type: "string" },
-    season: { type: "string" },
-    constraints: {
-      type: "object",
-      additionalProperties: false,
-      required: ["max_calories", "diet_type"],
-      properties: {
-        max_calories: { type: "number", minimum: 0 },
-        diet_type: { type: "string", minLength: 1 },
-      },
-    },
+    meal_type: { type: "string", minLength: 1 },
+    season: { type: "string", minLength: 1 },
+    constraints: constraintsSchema,
     context: commonContextSchema,
   },
 };
@@ -58,13 +60,14 @@ const replaceFoodRequestSchema = {
 const regenerateMealRequestSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["request_id", "meal_id", "context"],
+  required: ["request_id", "meal_id", "context", "meal_type", "season", "constraints"],
   properties: {
     request_id: { type: "string", minLength: 1 },
     trace_id: { type: "string", minLength: 1 },
     meal_id: { type: "string", minLength: 1 },
-    meal_type: { type: "string" },
-    season: { type: "string" },
+    meal_type: { type: "string", minLength: 1 },
+    season: { type: "string", minLength: 1 },
+    constraints: constraintsSchema,
     context: commonContextSchema,
   },
 };
@@ -108,14 +111,33 @@ function buildApiError(code, message, body, details = {}) {
   });
 }
 
+function requireString(value, fieldName) {
+  const normalized = toSafeString(value, "");
+  if (!normalized) {
+    throw new Error(`Missing required field: ${fieldName}`);
+  }
+  return normalized;
+}
+
+function requireNumber(value, fieldName) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`Missing required field: ${fieldName}`);
+  }
+  return value;
+}
+
 function toDecisionRequest(actionBody, actionType) {
   const safeBody = toSafeObject(actionBody);
   const safeContext = toSafeObject(safeBody.context);
   const safePrakriti = toSafeObject(safeContext.prakriti);
   const safeConstraints = toSafeObject(safeBody.constraints);
 
-  const requestId = toSafeString(safeBody.request_id, `${actionType}_request`);
+  const requestId = requireString(safeBody.request_id, "request_id");
   const traceId = toSafeString(safeBody.trace_id, `${requestId}_trace`);
+  const mealType = requireString(safeBody.meal_type, "meal_type");
+  const season = requireString(safeBody.season, "season");
+  const maxCalories = requireNumber(safeConstraints.max_calories, "constraints.max_calories");
+  const dietType = requireString(safeConstraints.diet_type, "constraints.diet_type");
 
   return {
     version: "DecisionRequest_v1",
@@ -129,20 +151,20 @@ function toDecisionRequest(actionBody, actionType) {
       risk_flags: [],
       symptoms: toSafeArray(safeContext.conditions).map((item) => String(item)).filter(Boolean),
       dosha_estimate: {
-        vata: typeof safePrakriti.vata === "number" ? safePrakriti.vata : 0.34,
-        pitta: typeof safePrakriti.pitta === "number" ? safePrakriti.pitta : 0.33,
-        kapha: typeof safePrakriti.kapha === "number" ? safePrakriti.kapha : 0.33,
+        vata: requireNumber(safePrakriti.vata, "context.prakriti.vata"),
+        pitta: requireNumber(safePrakriti.pitta, "context.prakriti.pitta"),
+        kapha: requireNumber(safePrakriti.kapha, "context.prakriti.kapha"),
       },
       allergies: [],
       preferences: [],
       context: {
-        meal_type: toSafeString(safeBody.meal_type, "lunch"),
-        season: toSafeString(safeBody.season, "summer"),
+        meal_type: mealType,
+        season,
       },
     },
     constraints: {
-      max_calories: typeof safeConstraints.max_calories === "number" ? safeConstraints.max_calories : 700,
-      diet_type: toSafeString(safeConstraints.diet_type, "vegetarian"),
+      max_calories: maxCalories,
+      diet_type: dietType,
     },
     meta: {
       timestamp: Date.now(),
@@ -193,9 +215,17 @@ async function runAction(req, res, actionType, validateFn, validationErrors) {
 
     return res.status(200).json(result);
   } catch (error) {
+    const reason = error instanceof Error ? error.message : "unknown_error";
+
+    if (reason.startsWith("Missing required field:")) {
+      return res.status(400).json(buildApiError("VALIDATION_ERROR", reason, req && req.body, {
+        source: `api.${actionType}`,
+      }));
+    }
+
     return res.status(500).json(buildApiError("INTERNAL_ERROR", "Decision action failed", req && req.body, {
       source: `api.${actionType}`,
-      reason: error instanceof Error ? error.message : "unknown_error",
+      reason,
     }));
   }
 }

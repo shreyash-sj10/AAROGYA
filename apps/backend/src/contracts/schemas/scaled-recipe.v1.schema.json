@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ScaledRecipe_v1",
+  "title": "ScaledRecipe_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["food", "quantity", "calories", "protein"],
+  "properties": {
+    "food": { "type": "string", "minLength": 1 },
+    "quantity": { "type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)?g$" },
+    "calories": { "type": "number", "minimum": 0 },
+    "protein": { "type": "number", "minimum": 0 },
+    "carbs": { "type": "number", "minimum": 0 },
+    "fat": { "type": "number", "minimum": 0 },
+    "meal_type": { "type": "string", "minLength": 1 }
+  }
+}

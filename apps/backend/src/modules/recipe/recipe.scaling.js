@@ -1,6 +1,4 @@
-function toSafeNumber(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+const { toSafeNumber } = require("../../utils/safeUtils");
 
 function round(value) {
   return Number(toSafeNumber(value, 0).toFixed(6));

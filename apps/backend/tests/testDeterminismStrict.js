@@ -50,20 +50,23 @@ function baseInput() {
   };
 }
 
-(function runDeterminismStrict() {
+(async function runDeterminismStrict() {
   const input = baseInput();
-  const first = executeGeneratePlanCore(input);
+  const first = await executeGeneratePlanCore(input);
   const firstOutputHash = hash(canonicalizeOutput(first));
   const firstTraceHash = hash(first.trace);
   const firstScore = first.score;
 
   for (let i = 0; i < 100; i += 1) {
-    const current = executeGeneratePlanCore(input);
+    const current = await executeGeneratePlanCore(input);
     assert(hash(canonicalizeOutput(current)) === firstOutputHash, `output hash mismatch at run ${i + 1}`);
     assert(hash(current.trace) === firstTraceHash, `trace hash mismatch at run ${i + 1}`);
     assert(current.score === firstScore, `score mismatch at run ${i + 1}`);
   }
 
   console.log("PASS: strict determinism + trace checksum validated across 100 runs");
-})();
-
+})().catch((error) => {
+  console.error("FAIL: strict determinism check failed");
+  console.error(error.message);
+  process.exit(1);
+});

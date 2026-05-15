@@ -1,7 +1,7 @@
 const Ajv = require("ajv");
 
 const { FOOD_CATEGORIES, foodSchema } = require("./food.schema");
-const { sampleFoods } = require("./food.samples");
+const { getFoods } = require("../../repositories/food.repository");
 
 const ajv = new Ajv({
   allErrors: true,
@@ -91,11 +91,11 @@ function loadAllFoods() {
     return cachedFoods;
   }
 
-  cachedFoods = sampleFoods.map((food) => {
+  cachedFoods = getFoods().map((food) => {
     const result = validateFood(food);
 
     if (!result.valid) {
-      const validationError = new Error(`Invalid food \"${food && food.id ? food.id : "unknown"}\"`);
+      const validationError = new Error(`Invalid food "${food && food.id ? food.id : "unknown"}"`);
       validationError.name = "FoodValidationError";
       validationError.details = result.errors;
       throw validationError;
@@ -114,7 +114,7 @@ function loadSampleFoods() {
 function getFoodsByCategory(category) {
   if (!FOOD_CATEGORIES.includes(category)) {
     throw new Error(
-      `Invalid food category \"${category}\". Allowed categories: ${FOOD_CATEGORIES.join(", ")}`
+      `Invalid food category "${category}". Allowed categories: ${FOOD_CATEGORIES.join(", ")}`
     );
   }
 

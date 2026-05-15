@@ -26,7 +26,7 @@ function formatDateUtc(date) {
 }
 
 function resolveWritablePath(requestedPath) {
-  const safeRequested = toSafeString(requestedPath, "/mnt/data/ayudiet_week_plan.pdf");
+  const safeRequested = toSafeString(requestedPath, "/mnt/data/aarogya_week_plan.pdf");
 
   if (safeRequested.startsWith("/")) {
     return path.resolve(process.cwd(), `.${safeRequested}`);
@@ -61,7 +61,7 @@ function writeFallbackPdf(outputPath, payload) {
   const stats = toSafeObject(adherence.stats);
 
   const lines = [
-    "AYUDIET Weekly Plan",
+    "AAROGYA Weekly Plan",
     `Date Range: ${toSafeString(payload.dateRange, "N/A")}`,
     `Days: ${toSafeArray(weekPlan.week_plan).length}`,
     "Optimization Summary:",
@@ -125,7 +125,7 @@ function writeFallbackPdf(outputPath, payload) {
 
 function generateWeeklyPDF(weekPlan, adherence, optimization, options = {}) {
   const safeOptions = toSafeObject(options);
-  const requestedPath = toSafeString(safeOptions.output_path, "/mnt/data/ayudiet_week_plan.pdf");
+  const requestedPath = toSafeString(safeOptions.output_path, "/mnt/data/aarogya_week_plan.pdf");
   const outputPath = resolveWritablePath(requestedPath);
   const outputDir = path.dirname(outputPath);
   const tmpPayloadPath = path.join(outputDir, "weekly_pdf_payload.json");

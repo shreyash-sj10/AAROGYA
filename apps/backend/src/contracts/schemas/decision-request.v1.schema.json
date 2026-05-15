@@ -61,7 +61,12 @@
         }
       }
     },
-    "constraints": {
+    "user_history": {
+      "anyOf": [
+        { "type": "object" },
+        { "type": "array", "items": { "type": "object" } }
+      ]
+    },    "constraints": {
       "type": "object",
       "additionalProperties": false,
       "required": ["max_calories", "diet_type"],
@@ -82,3 +87,5 @@
     }
   }
 }
+
+

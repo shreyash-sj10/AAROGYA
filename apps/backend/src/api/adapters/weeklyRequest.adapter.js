@@ -1,5 +1,5 @@
-const { loadAllFoods } = require("../../modules/food");
-const defaultRules = require("../../rules/engine/rule.samples");
+const { getFoods } = require("../../repositories/food.repository");
+const { getRules } = require("../../repositories/rule.repository");
 
 function toSafeObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -48,8 +48,8 @@ function adaptWeeklyDecisionRequest(payload) {
   const safeContext = toSafeObject(safe.week_context);
   const safeConstraints = toSafeObject(safe.constraints);
 
-  const hydratedFoods = loadAllFoods();
-  const hydratedRules = toSafeArray(defaultRules);
+  const hydratedFoods = getFoods();
+  const hydratedRules = getRules();
 
   return {
     request_id: toSafeString(safeMeta.request_id, `weekly_${toSafeString(safe.user_id, "anonymous")}`),
@@ -84,7 +84,7 @@ function adaptWeeklyDecisionRequest(payload) {
       foods_count: hydratedFoods.length,
       rules_count: hydratedRules.length,
     },
-    userHistory: {},
+    userHistory: clone(toSafeArray(safe.user_history)),
     weeklyState: {
       past_meals: [],
       category_counts: {},
@@ -100,4 +100,3 @@ function adaptWeeklyDecisionRequest(payload) {
 module.exports = {
   adaptWeeklyDecisionRequest,
 };
-

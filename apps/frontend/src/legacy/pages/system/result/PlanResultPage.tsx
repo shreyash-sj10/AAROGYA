@@ -114,11 +114,13 @@ export function PlanResultPage() {
         request_id: data.request_id,
         meal_id: recipeId,
         food_item: recipeId,
+        meal_type: requestDraft.user_state.context.meal_type,
+        season: requestDraft.user_state.context.season,
         decision_context: actionContext,
       });
 
       if (result.error || !result.data) {
-        setActionError(result.error?.error?.message || "Replace action failed.");
+        setActionError("Unable to process request. Please try a more specific question.");
         return;
       }
 
@@ -149,11 +151,13 @@ export function PlanResultPage() {
       const result = await regenerateMealApi({
         request_id: data.request_id,
         meal_id: mealId,
+        meal_type: requestDraft.user_state.context.meal_type,
+        season: requestDraft.user_state.context.season,
         decision_context: actionContext,
       });
 
       if (result.error || !result.data) {
-        setActionError(result.error?.error?.message || "Regenerate action failed.");
+        setActionError("Unable to process request. Please try a more specific question.");
         return;
       }
 
@@ -351,5 +355,8 @@ export function PlanResultPage() {
     </div>
   );
 }
+
+
+
 
 

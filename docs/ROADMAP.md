@@ -1,5 +1,7 @@
 # Roadmap
 
+**SDE flagship execution:** see [MASTER_EXECUTION_PLAN.md](MASTER_EXECUTION_PLAN.md) (phases 0–8: stabilization → safety → trace UX → ops → transactions → recipe-first → scale → UI → deploy).
+
 ## Stage Snapshot
 
 - `Stage 3.0`: Contract system hard-locked

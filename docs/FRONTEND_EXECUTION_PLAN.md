@@ -1,4 +1,4 @@
-# AYUDIET — Final Frontend Roadmap (Master Lock)
+# AAROGYA — Final Frontend Roadmap (Master Lock)
 
 This document is the locked, production-aligned frontend execution roadmap.
 No ambiguity, no missing pieces.

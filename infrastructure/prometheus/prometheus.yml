@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: aarogya-backend
+    metrics_path: /metrics/prometheus
+    static_configs:
+      # Backend on host (default PORT=5000). Docker Desktop: host.docker.internal
+      - targets: ["host.docker.internal:5000"]

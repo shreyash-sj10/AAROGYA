@@ -73,17 +73,21 @@ function buildInput() {
   };
 }
 
-(function runDeterminismProof() {
+(async function runDeterminismProof() {
   const iterations = 100;
   const baselineInput = buildInput();
-  const baseline = normalizeForComparison(executeGeneratePlanCore(clone(baselineInput)));
+  const baseline = normalizeForComparison(await executeGeneratePlanCore(clone(baselineInput)));
 
   for (let run = 1; run <= iterations; run += 1) {
-    const current = normalizeForComparison(executeGeneratePlanCore(clone(baselineInput)));
+    const current = normalizeForComparison(await executeGeneratePlanCore(clone(baselineInput)));
     const equal = JSON.stringify(current) === JSON.stringify(baseline);
     assert(equal, `Determinism failed at run ${run}`);
   }
 
   console.log(`PASS: deterministic output remained identical across ${iterations} runs`);
-})();
+})().catch((error) => {
+  console.error("FAIL: determinism proof");
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});
 

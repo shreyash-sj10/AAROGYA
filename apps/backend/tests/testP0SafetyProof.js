@@ -34,7 +34,7 @@ function buildInput(allergies) {
   };
 }
 
-(function runP0Safety() {
+(async function runP0Safety() {
   const cases = [
     ["mung dal"],
     ["toor dal"],
@@ -42,16 +42,22 @@ function buildInput(allergies) {
     ["milk"],
   ];
 
-  cases.forEach((allergies, idx) => {
-    const output = executeGeneratePlanCore(buildInput(allergies));
+  for (let idx = 0; idx < cases.length; idx += 1) {
+    const allergies = cases[idx];
+    const output = await executeGeneratePlanCore(buildInput(allergies));
     const mealNames = output.meal_plan.map((item) => String(item.name || "").toLowerCase());
-    allergies.forEach((allergy) => {
+    for (let j = 0; j < allergies.length; j += 1) {
+      const allergy = allergies[j];
       const blocked = String(allergy).toLowerCase();
       const leaked = mealNames.some((name) => name.includes(blocked));
       assert(!leaked, `P0 safety violation in case ${idx + 1}: found allergy ${blocked}`);
-    });
-  });
+    }
+  }
 
   console.log("PASS: P0 safety proof passed for allergy/prohibited cases");
-})();
+})().catch((error) => {
+  console.error("FAIL: P0 safety proof");
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});
 

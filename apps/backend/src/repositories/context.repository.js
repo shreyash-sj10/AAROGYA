@@ -1,6 +1,7 @@
 const redis = require("../services/cache/redis.service");
 const { logError } = require("../observability/logger");
 const { recordError } = require("../observability/metrics");
+const { toSafeString } = require("../utils/safeUtils");
 
 const contextStore = new Map();
 
@@ -21,10 +22,6 @@ const metrics = {
     recordError("SYSTEM_ERROR");
   },
 };
-
-function toSafeString(value, fallback = "") {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
-}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));

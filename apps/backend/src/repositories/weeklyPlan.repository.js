@@ -19,8 +19,6 @@ async function saveWeeklyPlan(record) {
   const userId = toSafeString(safe.user_id, "anonymous");
   const weekId = toSafeString(safe.week_id, "");
 
-  weeklyPlanStore.set(key(userId, weekId), safe);
-
   await pg.query(
     [
       "INSERT INTO weekly_plans (user_id, week_id, plan)",
@@ -30,6 +28,7 @@ async function saveWeeklyPlan(record) {
     [userId, weekId, JSON.stringify(safe.plan || safe)]
   );
 
+  weeklyPlanStore.set(key(userId, weekId), clone(safe));
   return clone(safe);
 }
 
@@ -43,7 +42,9 @@ async function getWeeklyPlan(userId, weekId) {
   );
 
   if (dbResult && dbResult.rows && dbResult.rows[0]) {
-    return clone(dbResult.rows[0].plan || null);
+    const plan = clone(dbResult.rows[0].plan || null);
+    weeklyPlanStore.set(key(uid, wid), { user_id: uid, week_id: wid, plan: clone(plan) });
+    return plan;
   }
 
   const inMemory = weeklyPlanStore.get(key(uid, wid));

@@ -14,7 +14,7 @@ export function AppShell() {
     <div className="min-h-screen bg-bg text-textPrimary">
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[240px_1fr]">
         <aside className="border-b border-border bg-surface p-4 lg:border-b-0 lg:border-r">
-          <h1 className="text-xl font-semibold">AYUDIET</h1>
+          <h1 className="text-xl font-semibold">AAROGYA</h1>
           <p className="mt-1 text-xs text-muted">Deterministic System Console</p>
           <nav className="mt-6 space-y-2">
             {navItems.map((item) => {

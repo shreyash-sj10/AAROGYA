@@ -1,16 +1,5 @@
 const QUANTITY_CONFIG = require("../../config/quantity");
-
-function toSafeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function toSafeObject(value) {
-  return value && typeof value === "object" ? value : {};
-}
-
-function toSafeNumber(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+const { toSafeObject, toSafeNumber, toSafeArray } = require("../../utils/safeUtils");
 
 function round(value) {
   return Number(toSafeNumber(value, 0).toFixed(6));

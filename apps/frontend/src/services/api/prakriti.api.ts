@@ -30,28 +30,14 @@ export const prakritiResponseSchema = z.object({
 export type PrakritiEstimateRequest = z.infer<typeof prakritiRequestSchema>;
 export type PrakritiEstimateResponse = z.infer<typeof prakritiResponseSchema>;
 
-export type EstimatePrakritiOptions = {
-  signal?: AbortSignal;
-  requestId?: string;
-  traceId?: string;
-  requestVersion?: number;
-};
-
 export async function estimatePrakriti(
-  input: PrakritiEstimateRequest,
-  options: EstimatePrakritiOptions = {}
+  payload: PrakritiEstimateRequest,
 ): Promise<ApiResult<PrakritiEstimateResponse>> {
   return apiClient<PrakritiEstimateResponse>({
     method: "POST",
     path: "/prakriti/estimate",
-    body: input,
+    body: payload,
     requestSchema: prakritiRequestSchema,
-    requestId: options.requestId,
-    traceId: options.traceId,
-    signal: options.signal,
-    headers: options.requestVersion !== undefined
-      ? { "x-prakriti-request-version": String(options.requestVersion) }
-      : undefined,
     responseSchema: prakritiResponseSchema,
   });
 }

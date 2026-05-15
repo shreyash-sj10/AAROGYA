@@ -1,4 +1,4 @@
-const { parseSymptoms } = require("../services/ml/mlClient");
+const { parseUserInputDeterministic } = require("../modules/userState/symptomInterpreter");
 
 const FALLBACK_SYMPTOM_MAP = {
   acidity: ["high_pitta"],
@@ -46,22 +46,12 @@ function extractFallbackFlags(text) {
 async function buildUserState(input) {
   const safeInput = input && typeof input === "object" ? input : {};
   const sanitizedText = normalizeString(safeInput.text);
+  const deterministic = parseUserInputDeterministic(sanitizedText);
 
-  let mlFlags = null;
-  let fallbackUsed = true;
+  const rawFlags = Array.isArray(deterministic && deterministic.risk_flags) && deterministic.risk_flags.length > 0
+    ? deterministic.risk_flags
+    : extractFallbackFlags(sanitizedText);
 
-  try {
-    const mlResult = await parseSymptoms(sanitizedText);
-    if (mlResult && Array.isArray(mlResult.symptom_tags) && mlResult.symptom_tags.length > 0) {
-      mlFlags = mlResult.symptom_tags;
-      fallbackUsed = false;
-    }
-  } catch (_error) {
-    mlFlags = null;
-    fallbackUsed = true;
-  }
-
-  const rawFlags = fallbackUsed ? extractFallbackFlags(sanitizedText) : mlFlags;
   const normalizedFlags = normalizeFlags(rawFlags);
 
   return {
@@ -69,8 +59,8 @@ async function buildUserState(input) {
     text: sanitizedText,
     risk_flags: normalizedFlags,
     meta: {
-      mlUsed: !fallbackUsed,
-      fallbackUsed,
+      mlUsed: false,
+      fallbackUsed: false,
     },
   };
 }

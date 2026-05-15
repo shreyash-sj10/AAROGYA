@@ -20,7 +20,11 @@ async function getUserById(userId) {
 
   if (dbResult && dbResult.rows && dbResult.rows[0]) {
     const row = dbResult.rows[0];
-    return row.data && typeof row.data === "object" ? clone(row.data) : null;
+    const data = row.data && typeof row.data === "object" ? clone(row.data) : null;
+    if (data) {
+      userStore.set(id, clone(data));
+    }
+    return data;
   }
 
   return clone(userStore.get(id) || null);
@@ -29,8 +33,6 @@ async function getUserById(userId) {
 async function upsertUser(user) {
   const safeUser = user && typeof user === "object" ? clone(user) : {};
   const id = toSafeString(safeUser.id || safeUser.user_id, "anonymous");
-
-  userStore.set(id, safeUser);
 
   await pg.query(
     [
@@ -41,6 +43,7 @@ async function upsertUser(user) {
     [id, JSON.stringify(safeUser)]
   );
 
+  userStore.set(id, clone(safeUser));
   return clone(safeUser);
 }
 

@@ -18,8 +18,8 @@ function stableHash(value) {
   return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-function replayAndVerify(originalRequest, storedTrace, storedOutput = null) {
-  const replayOutput = executeGeneratePlanCore(toSafeObject(originalRequest));
+async function replayAndVerify(originalRequest, storedTrace, storedOutput = null) {
+  const replayOutput = await executeGeneratePlanCore(toSafeObject(originalRequest));
   const replayTrace = toSafeObject(replayOutput).trace;
 
   const expectedTraceHash = stableHash(toSafeObject(storedTrace));
@@ -50,5 +50,3 @@ module.exports = {
   replayAndVerify,
   stableHash,
 };
-
-

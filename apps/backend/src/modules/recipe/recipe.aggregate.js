@@ -1,14 +1,4 @@
-function toSafeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function toSafeObject(value) {
-  return value && typeof value === "object" ? value : {};
-}
-
-function toSafeNumber(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+const { toSafeObject, toSafeNumber, toSafeArray } = require("../../utils/safeUtils");
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));

@@ -8,6 +8,18 @@ const TTL = {
   rag: 60,
 };
 
+let isRedisAvailable = false;
+const memoryFallback = new Map();
+
+function nowSeconds() {
+  return Math.floor(Date.now() / 1000);
+}
+
+function logCache(event, operation, key, details = "") {
+  const suffix = details ? `: ${details}` : "";
+  console.error(`[cache] ${event} operation=${operation} key=${key}${suffix}`);
+}
+
 function logCacheError(operation, key, error, extra = {}) {
   const details = error instanceof Error ? error.message : String(error || "unknown");
   console.error(JSON.stringify({
@@ -130,17 +142,43 @@ function resolveTtlByKey(key, ttlSeconds) {
   return 300;
 }
 
+function setFallbackValue(key, value, ttlSeconds) {
+  const ttl = resolveTtlByKey(key, ttlSeconds);
+  memoryFallback.set(key, {
+    value,
+    expires_at: nowSeconds() + ttl,
+  });
+}
+
+function getFallbackValue(key) {
+  const entry = memoryFallback.get(key);
+  if (!entry) {
+    return null;
+  }
+
+  if (entry.expires_at <= nowSeconds()) {
+    memoryFallback.delete(key);
+    return null;
+  }
+
+  return entry.value;
+}
+
 function get(key, options = {}) {
   const safeKey = ensureKey(key, "get");
   const optional = Boolean(options && options.optional === true);
 
   try {
-    return cacheRepository.getSync(safeKey);
+    const value = cacheRepository.getSync(safeKey);
+    isRedisAvailable = true;
+    return value;
   } catch (error) {
-    logCacheError("get", safeKey, error);
+    isRedisAvailable = false;
+    logCache("fallback_to_memory_cache", "get", safeKey, error instanceof Error ? error.message : "unknown");
     metricError("cache");
-    if (optional) {
-      return null;
+    const fallback = getFallbackValue(safeKey);
+    if (fallback !== null || optional) {
+      return fallback;
     }
     throw new Error("Cache failure");
   }
@@ -151,22 +189,35 @@ function set(key, value, ttlSeconds) {
 
   try {
     const ttl = resolveTtlByKey(safeKey, ttlSeconds);
-    return cacheRepository.setSync(safeKey, value, ttl);
+    const result = cacheRepository.setSync(safeKey, value, ttl);
+    isRedisAvailable = true;
+    return result;
   } catch (error) {
-    logCacheError("set", safeKey, error);
+    isRedisAvailable = false;
+    logCache("fallback_to_memory_cache", "set", safeKey, error instanceof Error ? error.message : "unknown");
     metricError("cache");
-    throw new Error("Cache failure");
+    setFallbackValue(safeKey, value, ttlSeconds);
+    return value;
   }
 }
 
 function del(key) {
   const safeKey = ensureKey(key, "delete");
+  memoryFallback.delete(safeKey);
 
   return cacheRepository.delete(safeKey).catch((error) => {
-    logCacheError("delete", safeKey, error);
+    isRedisAvailable = false;
+    logCache("fallback_to_memory_cache", "delete", safeKey, error instanceof Error ? error.message : "unknown");
     metricError("cache");
-    throw new Error("Cache failure");
+    return true;
   });
+}
+
+function getCacheHealth() {
+  return {
+    redis_available: isRedisAvailable,
+    fallback_entries: memoryFallback.size,
+  };
 }
 
 module.exports = {
@@ -174,4 +225,5 @@ module.exports = {
   set,
   delete: del,
   generateCacheKey,
+  getCacheHealth,
 };

@@ -1,0 +1,68 @@
+# Local dependency stack for AAROGYA (Phase 0.3).
+# Run app code on the host: `npm run dev` from repo root (backend + frontend).
+# Optional AI: prefer `cd apps/ai-service && uvicorn main:app --reload --port 8000`
+# (Python image with ML deps is large; not containerized here by default.)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aarogya
+      POSTGRES_PASSWORD: aarogya_local
+      POSTGRES_DB: aarogya
+    ports:
+      - "5432:5432"
+    volumes:
+      - aarogya_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aarogya -d aarogya"]
+      interval: 5s
+      timeout: 5s
+      retries: 8
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  prometheus:
+    profiles: ["telemetry"]
+    image: prom/prometheus:v2.53.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    profiles: ["telemetry"]
+    image: grafana/grafana:11.2.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_DEFAULT_THEME: light
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  aarogya_pgdata:
+
+  # Optional Phase 3 telemetry (does not start by default):
+  #   docker compose --profile telemetry up -d
+  prometheus_data:
+  grafana_data:
