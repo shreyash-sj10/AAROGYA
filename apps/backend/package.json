@@ -31,7 +31,7 @@
     "predev": "node scripts/free-listen-port.js",
     "dev": "nodemon src/server.js",
     "dev:kill-ports": "node scripts/free-listen-port.js",
-    "start": "node src/server.js",
+    "start": "node scripts/migrate.js && node src/server.js",
     "test:daily-plan": "node tests/testDailyPlanApi.js",
     "test:llm-hard": "node tests/testLLMHardValidation.js"
   },
